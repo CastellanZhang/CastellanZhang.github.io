@@ -118,6 +118,62 @@ body{ -webkit-animation: bugfix infinite 1s; }
           <div class="icon"></div>
             
     
+      <h1 class="title transition"><a href="/2016/02/05/cf_als/">CF的ALS算法推导</a></h1>
+    
+  
+          <ul>
+            <li>
+              <span class="heading-span">Posted on: </span>
+              <time datetime="2016-02-05T03:47:45.000Z">Feb 5 2016</time>
+            </li>
+            
+              <li>
+                <span class="heading-span">By: </span>
+
+                
+                  <a href="/">CastellanZhang</a>
+                
+
+              </li>
+            
+            <li>
+              <span class="heading-span">With: </span>
+              
+          </ul>
+        </header>
+      
+      <div class="entry">
+        
+          
+            <p>　　在上一篇中介绍了矩阵微分，现在就来牛刀小试一下。早些时候子龙问过我 Collaborative Filtering for Implicit Feedback Datasets这篇论文里的公式推导，在这里重新解一遍。<br>　　论文里给出的目标函数为：<br>$$<br>\min_{x_*,y_*}\left\{\sum_{u,i}c_{ui}(p_{ui}-x_u^Ty_i)^2+\lambda(\sum_u||x_u||^2+\sum_i||y_i||^2)\right\}\,\,\,\,(1)<br>$$<br>　　模型的来历不是今天的重点，简单描述一下各个变量的含义，其中$u$代表user，$i$代表item，$x_u\in R^f$，$y_i\in R^f$，未出现的变量 $r_{ui}$ 表示user对item的“消费”度量，<br>$$<br>p_{ui}=<br>\begin{cases}<br>  1 &amp; r_{ui}&gt;0 \\<br>  0 &amp; r_{ui}=0 \\<br>\end{cases}<br>$$<br>表征user是否对item有偏好，$c_{ui}=1+\alpha r_{ui}$ 表征$p_{ui}$ 的置信度。<br>　　假设user的数目为$m$，item的数目为$n$，则目标函数包含的项大约有$m\cdot n$，通常数量非常巨大，一些常见的优化算法比如SGD不再适合，论文中采用了ALS（alternating-least-squares）算法，这是一种迭代的方法，第一步先固定所有的$y_i$，求解最优的$x_u$；第二步固定所有的$x_u$，求解最优的$y_i$，依次迭代。<br>　　我们先看第一步，当固定所有$y_i$后，(1)式转化为<br>$$<br>\min_{x_*}\left\{\sum_{u,i}c_{ui}(p_{ui}-x_u^Ty_i)^2+\lambda\sum_u||x_u||^2\right\}\\<br>=\sum_u\min_{x_u}\left\{\sum_{i}c_{ui}(p_{ui}-x_u^Ty_i)^2+\lambda||x_u||^2\right\}\\<br>=\sum_u\min_{x_u}L_u(x_u)<br>$$<br>问题简化为对每个$L_u(x_u)$ 函数的极小值问题。<br>　　对每个$u$，我们定义一个$n\times n$的对角线矩阵$C^u$，其中$C_{ii}^u=c_{ui}$，定义向量$p(u)\in R^n$包含所有的$p_{ui}$。激动人心的时刻来到了，我们开始推导函数$L_u(x_u)$ 对$x_u$的微分<br>$$<br>L_u(x_u)=\sum_{i}c_{ui}(p_{ui}-x_u^Ty_i)^2+\lambda||x_u||^2\\<br>=<br>\sum_{i}c_{ui}(y_i^Tx_u-p_{ui})^2+\lambda x_u^Tx_u\\<br>dL_u=\sum_{i}2c_{ui}(x_u^Ty_i-p_{ui})y_i^Tdx_u+2\lambda x_u^Tdx_u\\<br>=2\left(\sum_{i}c_{ui}x_u^Ty_iy_i^T-\sum_{i}c_{ui}p_{ui}y_i^T+\lambda x_u^T\right)dx_u\\<br>$$<br>　　$L_u(x_u)$ 取极值，须$dL_u=0$，有<br>$$<br>\sum_{i}c_{ui}x_u^Ty_iy_i^T-\sum_{i}c_{ui}p_{ui}y_i^T+\lambda x_u^T=0\\<br>\Rightarrow \sum_{i}c_{ui}y_iy_i^Tx_u+\lambda Ix_u=\sum_{i}c_{ui}p_{ui}y_i\\<br>\Rightarrow \left(\sum_{i}c_{ui}y_iy_i^T+\lambda I\right)x_u=\sum_{i}c_{ui}p_{ui}y_i\,\,\,\,(2)<br>$$<br>　　按论文中的符号定义，设$Y^T=(y_1,\cdots,y_n)$，有<br>$$<br>\sum_{i}c_{ui}y_iy_i^T=(c_{u1}y_1,\cdots,c_{un}y_n)<br>\left(\begin{array}{c}<br>  y_1^T \\<br>  \vdots \\<br>  y_n^T \\<br>\end{array}\right)\\<br>=(y_1,\cdots,y_n)<br>\left(\begin{array}{ccc}<br>  c_{u1} &amp;  &amp;  \\<br>  &amp; \ddots &amp;  \\<br>  &amp;  &amp;  c_{un} \\<br>\end{array}\right)<br>\left(\begin{array}{c}<br>  y_1^T \\<br>  \vdots \\<br>  y_n^T \\<br>\end{array}\right)\\<br>=Y^TC^uY<br>$$<br>　　类似地，有 $\sum_{i}c_{ui}p_{ui}y_i=Y^TC^up(u)$，因此<br>$$<br>(2)\Rightarrow (Y^TC^uY+\lambda I)x_u=Y^TC^up(u)\\<br>\Rightarrow x_u=(Y^TC^uY+\lambda I)^{-1}Y^TC^up(u)<br>$$<br>正是论文中的结果。对于固定$x_u$求$y_i$完全类似，不再详述。</p>
+
+          
+        
+      </div>
+      <footer>
+        
+          <div class="alignright">
+            <a href="/2016/02/05/cf_als/#more" class="more-link">Continue Reading<i class="fa fa-long-arrow-right fa-1"></i></a>
+          </div>
+        
+        <div class="clearfix"></div>
+      </footer>
+    </div>
+</article>
+
+
+
+
+  <article class="post">
+  
+  
+    <div class="post-content-index">
+  
+      
+        <header>
+          <div class="icon"></div>
+            
+    
       <h1 class="title transition"><a href="/2016/02/02/matrix_differential/">Matrix Differential</a></h1>
     
   
@@ -207,6 +263,10 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <div class="widget recent-post">
   <h3 class="title">最新文章</h3>
   <ul class="entry">
+    
+      <li>
+        <a href="/2016/02/05/cf_als/">CF的ALS算法推导</a>
+      </li>
     
       <li>
         <a href="/2016/02/02/matrix_differential/">Matrix Differential</a>
