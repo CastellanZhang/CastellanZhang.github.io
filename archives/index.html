@@ -122,6 +122,95 @@ body{ -webkit-animation: bugfix infinite 1s; }
           <div class="icon"></div>
             
     
+      <h1 class="title transition"><a href="/2016/10/16/fm_ftrl_softmax/">FM, FTRL, Softmax</a></h1>
+    
+  
+          <ul>
+            <li>
+              <span class="heading-span">Posted on: </span>
+              <time datetime="2016-10-16T05:52:45.000Z">Oct 16 2016</time>
+            </li>
+            
+              <li>
+                <span class="heading-span">By: </span>
+
+                
+                  <a href="/">CastellanZhang</a>
+                
+
+              </li>
+            
+            <li>
+              <span class="heading-span">With: </span>
+              
+          </ul>
+        </header>
+      
+      <div class="entry">
+        
+          
+            <h1 id="FM_2C_FTRL_2C_Softmax"><a href="#FM_2C_FTRL_2C_Softmax" class="headerlink" title="FM, FTRL, Softmax"></a>FM, FTRL, Softmax</h1><p>前言（废话部分，可直接跳过）</p>
+<p>　　最近公司内部举办了一届数据挖掘大赛，题目是根据用户的一些属性和行为数据来预测性别和年龄区间，属于一个二分类问题（性别预测男女）和一个多分类问题（年龄分为7个区间），评判标准为logloss。共有一百多个队参加，我们组的三名小伙伴最终取得第三名的好成绩，跟前两名只有千分之一二的差距。</p>
+<p>赛后总结，发现前6名全部使用了DNN模型，而我们团队比较特别的是，不只使用了DNN，还有FM，最终方案是六七个DNN模型和一个FM模型的ensembling。</p>
+<p>其实比赛刚开始，他们使用的是XGBoost，但这次比赛的数据量规模较大，训练样本数达到千万，XGBoost跑起来异常的慢，一个模型要跑一两天。于是我把几个月前写的FM工具给他们用，效果非常好，二分类只需十几分钟，多分类也就半个小时，logloss和XGBoost基本持平，甚至更低。最终他们抛弃了XGBoost，使用FM在快速验证特征和模型融合方面都起到了很好的作用。此外，我们组另外两名实习生仅使用此FM工具就取得了第七名的成绩。</p>
+<p>最初写此FM代码时正值AlphaGo完虐人类，因此随手给这个工具起了个名字叫AlphaFM，今天我就来分享一下这个工具是如何实现的，先从原理讲起。</p>
+<p>二分类问题</p>
+<p>对于二分类，最常见的模型是LR，搭配FTRL优化算法。LR的输出会用到sigmoid函数，定义为：<br>$$<br>\sigma(x)=\frac{1}{1+e^{-x}}<br>$$<br>LR预测输入$x$是正样本的概率：<br>$$<br>P(y=1|x,w)=\frac{1}{1+e^{-w^Tx}}=\sigma(w^Tx)<br>$$<br>可以看到，$\sigma$函数的参数部分 $w^Tx$ 是一个线性函数，这也就是LR被称作线性模型的原因，模型参数只有一个$w$向量，相对简单。如果我们把这部分弄复杂呢？比如这样：<br>$$<br>\hat{y}(x):=w_0+\sum_{i=1}^nw_ix_i+\sum_{i=1}^n\sum_{j=i+1}^n\left<v_i,v_j\right>x_ix_j<br>$$<br>$$<br>=w_0+\sum_{i=1}^nw_ix_i+\sum_{i=1}^n\sum_{j=i+1}^nx_ix_j\sum_{f=1}^kv_{i,f}v_{j,f}<br>$$<br>其中，$x\in R^n$，$w_0\in R$，$w\in R^n$，$V\in R^{n\times k}$，这其实就是一个2阶FM，模型参数 $\Theta=\{w_0,w_1,…,w_n,v_{1,1},…,v_{n,k}\}$ 。如果直接将 $\hat{y}(x)$ 做输出，采用平方损失函数便可解决回归问题。而对于二分类问题，依然是外面套一个sigmoid函数，即：<br>$$<br>P(y=1|x,\Theta)=\frac{1}{1+e^{-\hat{y}(x|\Theta)}}<br>$$<br>对于$y\in \{-1,1\}$，可统一成形式：<br>$$<br>P(y|x,\Theta)=\frac{1}{1+e^{-y\hat{y}(x|\Theta)}}=\sigma(y\hat{y}(x|\Theta))<br>$$<br>模型参数估计依然采用最大似然的思路，对于训练数据$S$，最优化问题为：<br>$$<br>\max_{\Theta}\prod_{(x,y)\in S}P(y|x,\Theta)=\min_{\Theta}\sum_{(x,y)\in S}-\ln P(y|x,\Theta)<br>$$<br>即损失函数为：<br>$$<br>l(\hat{y}(x|\Theta),y)=-\ln P(y|x,\Theta)=-\ln \sigma(y\hat{y}(x|\Theta))<br>$$<br>此损失函数对 $\hat{y}$ 求偏导会得到一个优雅简单的形式：<br>$$<br>\frac{\partial l}{\partial\hat{y}}=(\sigma(y\hat{y})-1)y<br>$$<br>再配合上 $\hat{y}$ 对模型参数的偏导：<br>$$<br>\frac{\partial\hat{y}}{\partial\theta}=<br>\begin{cases}<br>  1,   &amp; if\,\,\theta\,\,is\,\,w_0 \\<br>  x_i, &amp; if\,\,\theta\,\,is\,\,w_i \\<br>  x_i\sum_{j=1}^nv_{j,f}x_j-v_{i,f}x_i^2 &amp; if\,\,\theta\,\,is\,\,v_{i,f} \\<br>\end{cases}<br>$$<br>便可得到损失函数 $l$ 对所有模型参数的偏导。此时，我们能够很自然的想到用SGD的方法来求解模型参数，但我这里采用了更加牛逼高效的FTRL优化算法。</v_i,v_j\right></p>
+<p>让我们来简单回顾一下FTRL，</p>
+<p><img src="/images/2016/10/ftrl.jpg" alt="ftrl.jpg"></p>
+<p>　　在最优化问题中，经常涉及到导数或梯度的计算，比如 $\nabla(x’Ax)$，虽然自己最终也能推导出来等于 $(A+A’)x$，但总感觉在这块缺少系统的知识，有时还会想向量函数的导数又如何计算，矩阵函数呢？在网上搜了很久，似乎这块的知识点一直比较混乱，wikipedia的Matrix calculus词条也写得不好，甚至有人质疑。大约一年前又去中关村图书大厦遍寻矩阵相关的书籍，只找到清华出的一本《矩阵分析与应用》涉及到矩阵微分，手机拍了几十张照片回来细读仍不甚满意。无意间却从网上找到了这本书：Matrix Differential Calculus with Applications in Statistics and Econometrics，正是我想要的！（其实清华那本和wikipedia都提到了这本书，只是当时没注意。）书甚厚，博大精深，我把感兴趣的部分边看边做笔记，唯纸薄字陋难存久，便想着不如写成blog，可惜本是懒惰之人一拖便是一年，直到最近失意百无聊赖，终于完成。文章憎命达，诚如是。</p>
+<h2 id="1-__u57FA_u7840_u6982_u5FF5"><a href="#1-__u57FA_u7840_u6982_u5FF5" class="headerlink" title="1. 基础概念"></a>1. 基础概念</h2><p>　　向量$x$的范数(norm)定义为：<br>$$||x||=(x’x)^{1/2}$$</p>
+<p>　　假设$a$为$n \times 1$向量，$A$为$n \times n$矩阵，$B$为$n \times m$矩阵，则$a’x$称为向量$x$的线性型，$x’Ax$称为$x$的二次型，$x’By$称为$x$和$y$的双线性型。<br>　　不失一般性，我们假定$A$为对称阵，因为我们总可以用 $(A+A’)/2$ 来代替，推导如下：<br>$$x’(A+A’)x=x’Ax+x’A’x=x’Ax+(x’A’x)’=x’Ax+x’Ax=2x’Ax$$<br>　　我们说，$A$是正定的，如果对所有$x\ne0$，有$x’Ax&gt;0$；$A$是半正定的，如果对所有$x$，有$x’Ax\ge0$。负定的定义类似，不再赘述。<br>　　易证 $BB’$ 和 $B’B$ 都是半正定的，因为 $x’B’Bx=(Bx)’Bx\ge0$  </p>
+<p>　　方阵的迹(trace)定义为：</p>
+<p>$$trA=\sum_{i=1}^na_{ii}$$</p>
+<p>　　矩阵的范数定义为：</p>
+<p>$$||A||=(trA’A)^{1/2}$$</p>
+<p>　　矩阵的直积：<br>　　$A$为$m\times n$矩阵，$B$为$p\times q$矩阵，则$A\otimes B$为$mp\times nq$的矩阵<br>$$<br>A\otimes B=<br>\left(\begin{array}{ccc}<br>  a_{11}B &amp; \cdots &amp; a_{1n}B \\<br>  \vdots  &amp;        &amp; \vdots  \\<br>  a_{m1}B &amp; \cdots &amp; a_{mn}B \\<br>\end{array}\right)<br>$$</p>
+<p>　　VEC算子：<br>　　设$A$为$m\times n$矩阵，$a_i$为其第$i$列，则$vec\,A$为$mn\times 1$向量<br>$$<br>vec\,A=<br>\left(\begin{array}{c}<br>  a_1 \\<br>  a_2 \\<br>  \vdots \\<br>  a_n<br>\end{array}\right)<br>$$<br>　　几个相关公式:<br>$$vec\,a’=vec\,a=a$$<br>$$vec\,ab’=b\otimes a$$<br>$$(vec\,A)’vec\,B=tr\,A’B$$<br>$$vec\,ABC=(C’\otimes A)vec\,B$$<br>$$vec\,AB=(B’\otimes I_m)vec\,A=(B’\otimes A)vec\,I_n=(I_q\otimes A)vec\,B,\,\,\,\,A:m\times n,B:n\times q$$</p>
+<h2 id="2-__u5FAE_u5206_28differential_29_u7684_u5B9A_u4E49"><a href="#2-__u5FAE_u5206_28differential_29_u7684_u5B9A_u4E49" class="headerlink" title="2. 微分(differential)的定义"></a>2. 微分(differential)的定义</h2><h3 id="2-1__u6807_u91CF_u51FD_u6570_u7684_u5FAE_u5206"><a href="#2-1__u6807_u91CF_u51FD_u6570_u7684_u5FAE_u5206" class="headerlink" title="2.1 标量函数的微分"></a>2.1 标量函数的微分</h3><p>　　对于一维的情况，$\phi(x):R\rightarrow R$<br>$$\phi(c+u)=\phi(c)+u\phi’(c)+r_c(u)$$<br>$$\lim_{u\rightarrow 0}\frac{r_c(u)}{u}=0$$<br>　　定义 $\phi$ 在$c$点基于增量$u$的一阶微分为<br>$$d\phi(c;u)=u\phi’(c)$$</p>
+<h3 id="2-2__u5411_u91CF_u51FD_u6570_u7684_u5FAE_u5206"><a href="#2-2__u5411_u91CF_u51FD_u6570_u7684_u5FAE_u5206" class="headerlink" title="2.2 向量函数的微分"></a>2.2 向量函数的微分</h3><p>　　设函数$f:S\rightarrow R^m$，$S\subset R^n$，$c$是$S$的一个内点(interior point)，$B(c;r)$ 是$S$中$c$点的一个邻域(n-ball)，$u$是$R^n$中的一点，满足 $||u||&lt;r$，因此有$c+u\in B(c;r)$，如果存在一个$m\times n$实矩阵$A$，满足<br>$$f(c+u)=f(c)+A(c)u+r_c(u)$$<br>对于所有的$u\in R^n$，$||u||&lt;r$，且<br>$$\lim_{u\rightarrow0}\frac{r_c(u)}{||u||}=0$$<br>这样，函数$f$就被称为在$c$点可微。矩阵$A(c)$ 称为$f$在$c$点的一阶导数。$m\times 1$向量<br>$$df(c;u)=A(c)u$$<br>称为$f$在$c$点的一阶微分（基于增量$u$）。</p>
+<h3 id="2-3__u5411_u91CF_u51FD_u6570_u7684_u504F_u5BFC_u6570"><a href="#2-3__u5411_u91CF_u51FD_u6570_u7684_u504F_u5BFC_u6570" class="headerlink" title="2.3 向量函数的偏导数"></a>2.3 向量函数的偏导数</h3><p>　　令$f=(f_1,f_2,\cdots,f_m)$，$t\in R$，如果极限<br>$$\lim_{t\rightarrow0}\frac{f_i(c+te_j)-f_i(c)}{t}$$<br>存在，则称之为$f_i$在$c$点的第$j$个偏导数，记为$D_jf_i(c)$，或者 $[\partial f_i(x)/\partial x_j]_{x=c}$ 或者 $\partial f_i(c)/\partial x_j$。</p>
+<p>　　如果$f$在$c$点可微，则所有的偏导数$D_jf_i(c)$ 存在。反过来不一定成立。</p>
+<p>　　如果$f$在$c$点可微，那么存在矩阵$A(c)$，<br>$$f(c+u)=f(c)+A(c)u+r_c(u)$$<br>这里忽略了一些限制条件，详见前面向量的微分。<br>　　$A(c)$ 的每一项$a_{ij}(c)$ 其实就是相应的偏导数$D_jf_i(c)$，即<br>$$A(c)=Df(c)$$<br>这里的$Df(c)$ 被称作雅可比矩阵(Jacobian matrix)，注意$A(c)$ 存在时$Df(c)$ 一定存在，反之未必。  </p>
+<h3 id="2-4__u68AF_u5EA6_28gradient_29_u7684_u5B9A_u4E49"><a href="#2-4__u68AF_u5EA6_28gradient_29_u7684_u5B9A_u4E49" class="headerlink" title="2.4 梯度(gradient)的定义"></a>2.4 梯度(gradient)的定义</h3><p>　　$Df(c)$ 的转置称为$f$在$c$点的梯度，用 $\nabla f(c)$ 表示，即<br>$$\nabla f(c)=(Df(c))’$$<br>　　当向量函数$f:S\rightarrow R^m$ 退化成标量函数 $\phi:S\rightarrow R$ 时，雅可比矩阵退化成$1\times n$行向量$D\phi(c)$，梯度退化成$n\times 1$列向量 $\nabla\phi(c)$。</p>
+<h3 id="2-5__u77E9_u9635_u51FD_u6570_u7684_u5FAE_u5206"><a href="#2-5__u77E9_u9635_u51FD_u6570_u7684_u5FAE_u5206" class="headerlink" title="2.5 矩阵函数的微分"></a>2.5 矩阵函数的微分</h3><p>　　现在终于轮到矩阵函数出场了，令 $F:S\rightarrow R^{m\times p}$，其中 $S\subset R^{n\times q}$。$C$是$S$的内点，且令 $B(C;r)=\{X:X\in R^{n\times q},||X-C||&lt;r\}$，这里 $||X||=(trX’X)^{1/2}$。<br>　　设点$U$是$R^{n\times q}$ 内一点，满足 $||U||&lt;r$，因此有 $C+U\in B(C;r)$。如果存在一个 $mp\times nq$ 的矩阵 $A$，有<br>$$vec\,F(C+U)=vec\,F(C)+A(C)vec\,U+vec\,R_C(U)$$<br>对于所有 $U\in R^{n\times q}$，$||U||&lt;r$，且<br>$$\lim_{U\rightarrow0}\frac{R_C(U)}{||U||}=0$$<br>那么，函数 $F$ 被称为在 $C$ 点可微。<br>　　$m\times p$ 矩阵 $dF(C;U)$ 由下式定义<br>$$vec\,dF(C;U)=A(C)vec\,U$$<br>被称作 $F$ 在 $C$ 点基于增量 $U$ 的一阶微分，$mp\times nq$ 矩阵 $A(C)$ 被称作 $F$ 在 $C$ 点的一阶导数。</p>
+<p>　　可以看到，这里的做法就是将矩阵函数化为向量函数来处理。对于每个矩阵函数 $F$（自变量和函数值均为矩阵），<br>我们都可以构造一个对应的向量函数$f:vec\,S\rightarrow R^{mp}$（自变量和函数值均为向量）<br>$$f(vec\,X)=vec\,F(X)$$<br>易得<br>$$vec\,dF(C;U)=df(vec\,C;vec\,U)$$<br>我们定义 $F$ 在 $C$ 点的雅可比矩阵为<br>$$DF(C)=Df(vec\,C)$$<br>这是一个 $mp\times nq$ 的矩阵，其第 $ij$ 元素是$vec\,F$的第 $i$ 个分量对 $vec\,X$ 的第 $j$个分量在 $X=C$ 处的偏导数。</p>
+<p>　　当 $F$ 在 $C$ 点可微，有 $DF(C)=A(C)$</p>
+<p>　　设 $U$ 和 $V$ 是矩阵函数，$A$ 是矩阵常量，有<br>$$dA=0$$<br>$$d(\alpha U)=\alpha dU$$<br>$$d(U+V)=dU+dV$$<br>$$d(U-V)=dU-dV$$<br>$$d(UV)=(dU)V+UdV$$<br>$$dU’=(dU)’$$<br>$$d\,vec\,U=vec\,dU$$<br>$$d\,tr\,U=tr\,dU$$</p>
+<h3 id="2-6__u94FE_u5F0F_u6CD5_u5219"><a href="#2-6__u94FE_u5F0F_u6CD5_u5219" class="headerlink" title="2.6 链式法则"></a>2.6 链式法则</h3><p>　　同最简单的标量自变量的标量函数一样，链式法则同样成立。<br>　　设函数$f:S\rightarrow R^m$，$S\subset R^n$，在 $c$ 点可微。$f(x)\in T$，设函数$g:T\rightarrow R^p$在 $b=f(c)$ 点可微。定义复合函数$h:S\rightarrow R^p$ 如下：<br>$$<br>h(x)=g(f(x))<br>$$<br>那么，$h$ 在 $c$ 点可微，并且<br>$$<br>Dh(c)=(Dg(b))(Df(c))<br>$$<br>$$<br>dh(c;u)=(Dg(b))(Df(c))u=(Dg(b))df(c;u)=dg(b;df(c;u))<br>$$<br>　　对矩阵函数类似，省略掉函数定义，直接给出公式：<br>$$<br>H(X)=G(F(X))<br>$$<br>$$<br>DH(C)=(DG(B))(DF(C))<br>$$<br>$$<br>dH(C;U)=dG(B;dF(C;U))<br>$$<br>　　我们还可以简写微分符号：<br>$$<br>y=g(t)<br>$$<br>$$<br>dy=dg(t;dt)<br>$$<br>$$<br>t=f(x)<br>$$<br>$$<br>y=g(f(x))\equiv h(x)<br>$$<br>$$<br>dy=dh(x;dx)=dg(f(x);df(x;dx))=dg(t;dt)<br>$$<br>　　我们甚至可以不用$y$直接用$g$本身来简写：<br>$$<br>dg=dg(t;dt)<br>$$<br>　　举例：<br>$$<br>y=\phi(x)=e^{x’x}\\<br>dy=de^{x’x}=e^{x’x}(dx’x)=e^{x’x}((dx)’x+x’dx)=(2e^{x’x}x’)dx<br>$$<br>$$<br>z=\phi(\beta)=(y-X\beta)’(y-X\beta)<br>$$<br>设$e=y-X\beta$，则<br>$$<br>dz=de’e=2e’de=2e’d(y-X\beta)\\<br>=-2e’Xd\beta=-2(y-X\beta)’Xd\beta<br>$$</p>
+<h2 id="3-__u96C5_u53EF_u6BD4_u77E9_u9635_28Jacobian_matrix_29"><a href="#3-__u96C5_u53EF_u6BD4_u77E9_u9635_28Jacobian_matrix_29" class="headerlink" title="3. 雅可比矩阵(Jacobian matrix)"></a>3. 雅可比矩阵(Jacobian matrix)</h2><p>　　重新梳理一下雅克比矩阵的求法，基本思路如下：<br>　　给定一个矩阵函数$F(X)$<br>　　(1)计算$F(X)$ 的微分<br>　　(2)向量化得到$d\,vec\,F(X)=A(X)d\,vec\,X$<br>　　(3)得到雅克比矩阵$DF(X)=A(X)$  </p>
+<p>　　我们再次明确一下自变量和函数的符号，见下表<br>$$<br>\begin{array}{cccc}<br>\hline<br>  &amp; Scalar   &amp; Vector   &amp; Matrix   \\<br>  &amp; variable &amp; variable &amp; variable \\<br>\hline<br>Scalar\,function &amp; \phi(\xi) &amp; \phi(x) &amp; \phi(X) \\<br>Vector\,function &amp; f(\xi) &amp; f(x) &amp; f(X) \\<br>Matrix\,function &amp; F(\xi) &amp; F(x) &amp; F(X) \\<br>\hline<br>\end{array}<br>$$</p>
+<p>　　雅克比矩阵本质上就是要解决如何排列 $F(X)$ 的所有偏导数 $\partial f_{st}(X)/\partial x_{ij}$ 的问题。<br>　　先给出一些符号定义：<br>　　$\phi$为标量函数，$X=(x_{ij})$ 为 $n\times q$ 矩阵，$F=(f_{st})$ 为 $m\times p$ 矩阵<br>$$<br>\frac{\partial\phi(X)}{\partial X}=<br>\left(\begin{array}{ccc}<br>  \partial\phi/\partial x_{11} &amp; \cdots &amp; \partial\phi/\partial x_{1q} \\<br>  \vdots  &amp;        &amp; \vdots  \\<br>  \partial\phi/\partial x_{n1} &amp; \cdots &amp; \partial\phi/\partial x_{nq} \\<br>\end{array}\right)<br>$$</p>
+<p>$$<br>\frac{\partial F(X)}{\partial X}=<br>\left(\begin{array}{ccc}<br>  \partial f_{11}/\partial X &amp; \cdots &amp; \partial f_{1p}/\partial X \\<br>  \vdots  &amp;        &amp; \vdots  \\<br>  \partial f_{m1}/\partial X &amp; \cdots &amp; \partial f_{mp}/\partial X \\<br>\end{array}\right)<br>$$</p>
+<p>　　特别地，$\phi$为标量函数，$\partial\phi/\partial x$是列向量，$\partial\phi/\partial x’$ 是行向量；$m\times1$的向量函数$f(x)$，$x$为$n\times1$向量，可以有四种排列：$\partial f/\partial x’$（$m\times n$矩阵），$\partial f’/\partial x$（$n\times m$矩阵），$\partial f/\partial x$（$mn\times 1$矩阵），$\partial f’/\partial x’$（$1\times mn$矩阵）。<br>　　下面给出雅克比矩阵的符号定义：<br>$$<br>D\phi(x)=(D_1\phi(x),\dots,D_n(x))=\frac{\partial\phi(x)}{\partial x’}<br>$$<br>$$<br>Df(x)=\frac{\partial f(x)}{\partial x’}<br>$$<br>$$<br>DF(X)=\frac{\partial\,vec\,F(X)}{\partial(vec\,X)’}<br>$$<br>　　可以对比一下，$DF(X)$ 是 $mp\times nq$，而 $\partial F(X)/\partial X$ 是$mn\times pq$。<br>　　举几个例子，$F(X)=AXB$，则<br>$$dF(X)=A(dX)B$$<br>$$d\,vec\,F(X)=(B’\otimes A)d\,vec\,X$$<br>　　因此有<br>$$DF(X)=B’\otimes A$$<br>　　令 $\phi(x)=x’Ax$，则<br>$$<br>d\phi(x)=d(x’Ax)=(dx)’Ax+x’Adx\\<br>=((dx)’Ax)’+x’Ax=x’A’dx+x’Adx\\<br>=x’(A+A’)dx<br>$$<br>　　因此有<br>$$<br>D\phi(x)=x’(A+A’)<br>$$</p>
+
+          
+        
+      </div>
+      <footer>
+        
+          <div class="alignright">
+            <a href="/2016/10/16/fm_ftrl_softmax/#more" class="more-link">Continue Reading<i class="fa fa-long-arrow-right fa-1"></i></a>
+          </div>
+        
+        <div class="clearfix"></div>
+      </footer>
+    </div>
+</article>
+
+
+
+  
+    <article class="post">
+  
+  
+    <div class="post-content-index">
+  
+      
+        <header>
+          <div class="icon"></div>
+            
+    
       <h1 class="title transition"><a href="/2016/02/05/cf_als/">CF的ALS算法推导</a></h1>
     
   
@@ -272,6 +361,10 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <div class="widget recent-post">
   <h3 class="title">最新文章</h3>
   <ul class="entry">
+    
+      <li>
+        <a href="/2016/10/16/fm_ftrl_softmax/">FM, FTRL, Softmax</a>
+      </li>
     
       <li>
         <a href="/2016/02/05/cf_als/">CF的ALS算法推导</a>
