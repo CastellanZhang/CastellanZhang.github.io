@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8">
   
-  <title>彙整：2017 | CastellanZhang&#39;s blog</title>
+  <title>彙整：2017/7 | CastellanZhang&#39;s blog</title>
   <meta name="author" content="CastellanZhang">
   
   
@@ -108,7 +108,7 @@ body{ -webkit-animation: bugfix infinite 1s; }
   </div>
   <div id="content" class="inner">
     <div id="main-col" class="alignleft"><div id="wrapper" class="padding">
-<h2 class="archive-title">2017</h2>
+<h2 class="archive-title">2017/7</h2>
 
 
   
@@ -164,89 +164,6 @@ body{ -webkit-animation: bugfix infinite 1s; }
         
           <div class="alignright">
             <a href="/2017/07/16/lambdafm/#more" class="more-link">Continue Reading<i class="fa fa-long-arrow-right fa-1"></i></a>
-          </div>
-        
-        <div class="clearfix"></div>
-      </footer>
-    </div>
-</article>
-
-
-
-  
-    <article class="post">
-  
-  
-    <div class="post-content-index">
-  
-      
-        <header>
-          <div class="icon"></div>
-            
-    
-      <h1 class="title transition"><a href="/2017/06/01/mlr_plm/">MLR, PLM</a></h1>
-    
-  
-          <ul>
-            <li>
-              <span class="heading-span">Posted on: </span>
-              <time datetime="2017-06-01T15:25:17.000Z">Jun 1 2017</time>
-            </li>
-            
-              <li>
-                <span class="heading-span">By: </span>
-
-                
-                  <a href="/">CastellanZhang</a>
-                
-
-              </li>
-            
-            <li>
-              <span class="heading-span">With: </span>
-              
-          </ul>
-        </header>
-      
-      <div class="entry">
-        
-          
-            <h1 id="MLR_2C_PLM"><a href="#MLR_2C_PLM" class="headerlink" title="MLR, PLM"></a>MLR, PLM</h1><h2 id="u524D_u8A00"><a href="#u524D_u8A00" class="headerlink" title="前言"></a>前言</h2><p>　　最近阿里的盖坤大神放出了一篇论文Learning Piece-wise Linear Models from Large Scale Data for Ad Click Prediction，介绍了阿里广告的一个主要ctr预估模型Large Scale Piece-wise Linear Model (LS-PLM)，在2012年就开始使用，据说早期叫做Mixture of LR(MLR)。</p>
-<p>　　看完论文就很想验证一下效果，于是基于原来的<a href="https://github.com/CastellanZhang/alphaFM" target="_blank" rel="external">alphaFM</a>代码很快就实现了一个单机多线程版本，优化算法用了FTRL。完成代码的时候正好又赶上alphaGo完虐人类，于是命名仍然冠以alpha，叫做alphaPLM。</p>
-<p>　　代码地址在：<br>　　<a href="https://github.com/CastellanZhang/alphaPLM" target="_blank" rel="external">https://github.com/CastellanZhang/alphaPLM</a></p>
-<h2 id="u7B97_u6CD5_u539F_u7406"><a href="#u7B97_u6CD5_u539F_u7406" class="headerlink" title="算法原理"></a>算法原理</h2><p>　　PLM可以看做是混合了聚类和分类的思想，即将特征空间分片或者说分区间，每个分片就是一个聚类，每个聚类对应一个单独的线性模型LR。这里的聚类是软聚类，即每个样本可以属于多个分片，有概率分布。最后计算ctr是先算出在每个分片的ctr，再按属于各个分片的概率加权平均。通过分片线性拟合，达到了非线性的效果。</p>
-<p>　　具体模型公式如下：</p>
-<p>$$<br>p(y=1|x)=\sum_{i=1}^{m}\frac{e^{u_i^Tx}}{\sum_{j=1}^me^{u_j^Tx}}\cdot\frac{1}{1+e^{-w_i^Tx}}\\<br>=\sum_{i=1}^{m}\frac{e^{u_i^Tx}}{\sum_{j=1}^me^{u_j^Tx}}\cdot\sigma(w_i^Tx)<br>$$</p>
-<p>　　可以看到，聚类部分是用了softmax函数，分类部分就是LR的sigmoid函数。该算法的巧妙之处就是将二者合成一个公式，一起训练参数。公式中m是分片数，属于超参数，由人工给定。模型参数是 $\Theta=\{u_1,…,u_m,w_1,…,w_m\}\in R^{d\times 2m}$，需要训练得到。</p>
-<p>　　论文中的优化方法采用的是LBFGS，实现起来比较复杂，我为了快速验证算法效果，优化改成了FTRL，需要计算损失函数对u和w的梯度，下面给出推导。</p>
-<p>　　首先对于 $y\in\{-1,1\}$，模型可以统一形式：</p>
-<p>$$<br>p(y|x)=\sum_{i=1}^{m}\frac{e^{u_i^Tx}}{\sum_{j=1}^me^{u_j^Tx}}\cdot\frac{1}{1+e^{-yw_i^Tx}}\\<br>=\sum_{i=1}^{m}\frac{e^{u_i^Tx}}{\sum_{j=1}^me^{u_j^Tx}}\cdot\sigma(yw_i^Tx)<br>$$</p>
-<p>　　单条样本(x,y)的损失函数：<br>$$<br>l(\Theta|x,y)=-\ln P(y|x,\Theta)=-\ln\frac{1}{\sum_{j=1}^me^{u_j^Tx}}\sum_{i=1}^{m}e^{u_i^Tx}\sigma(yw_i^Tx)\\<br>=\ln\sum_{j=1}^me^{u_j^Tx}-\ln(\sum_{i=1}^{m}e^{u_i^Tx}\sigma(yw_i^Tx))<br>$$<br>　　梯度计算：<br>$$<br>\nabla_{u_k}l=\frac{e^{u_k^Tx}x}{\sum_{j=1}^me^{u_j^Tx}}-\frac{e^{u_k^Tx}\sigma(yw_k^Tx)x}{\sum_{i=1}^{m}e^{u_i^Tx}\sigma(yw_i^Tx)}<br>$$<br>$$<br>\nabla_{w_k}l=\frac{ye^{u_k^Tx}\sigma(yw_k^Tx)(\sigma(yw_k^Tx)-1)x}{\sum_{i=1}^{m}e^{u_i^Tx}\sigma(yw_i^Tx)}<br>$$<br>　　后续的FTRL算法框架和alphaFM非常类似，不再详述，可以参见之前的<a href="http://castellanzhang.github.io/2016/10/16/fm_ftrl_softmax/" target="_blank" rel="external">文档</a>和实现代码。</p>
-<h2 id="u7B97_u6CD5_u6548_u679C"><a href="#u7B97_u6CD5_u6548_u679C" class="headerlink" title="算法效果"></a>算法效果</h2><p>　　论文中给了一个demo数据的例子，如下图：</p>
-<p><img src="/img/plm.jpg" alt=""></p>
-<p>　　我们可以通过代码生成类似的样本，来验证一下算法效果：<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#demo_data1.py</span></span><br><span class="line"><span class="keyword">import</span> sys</span><br><span class="line"><span class="keyword">from</span> random <span class="keyword">import</span> random</span><br><span class="line"></span><br><span class="line">n = int(sys.argv[<span class="number">1</span>])</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> range(n):</span><br><span class="line">    x = <span class="number">2</span> * random() - <span class="number">1.0</span></span><br><span class="line">    y = <span class="number">2</span> * random() - <span class="number">1.0</span></span><br><span class="line">    label = <span class="number">1</span></span><br><span class="line">    <span class="keyword">if</span> abs(x) + abs(y) &lt; <span class="number">1.0</span>:</span><br><span class="line">        label = <span class="number">0</span></span><br><span class="line">    <span class="keyword">print</span> str(label) + <span class="string">" x:"</span> + str(x) + <span class="string">" y:"</span> + str(y)</span><br></pre></td></tr></table></figure></p>
-<p>　　生成1万条训练样本和2000条测试样本：</p>
-<p>　　<code>python demo_data1.py 10000 &gt; train.txt</code></p>
-<p>　　<code>python demo_data1.py 2000 &gt; test.txt</code></p>
-<p>　　alphaPLM的训练参数如下：</p>
-<p>　　<code>cat train.txt | ./plm_train -m model.txt -u_bias 1 -w_bias 1 -u_l1 0.001 -u_l2 0.1 -w_l1 0.001 -w_l2 0.1 -core 1 -piece_num 4 -u_stdev 1 -w_stdev 1 -u_alpha 10 -w_alpha 10</code></p>
-<p>　　在测试集的AUC可以达到0.99以上。</p>
-<p>　　如果是LR或FM，你会发现无论你怎么调参，AUC始终在0.5左右。</p>
-<p>　　直观上也很容易理解，看图就会发现，如果特征就是x和y的坐标值的话，数据非线性可分，而很明显在四个象限的分片里分别都是线性可分的。</p>
-<p>　　你心里是否已经忍不住开始唾弃LR：“啊呸，LR果然是个战五渣！连这么个demo数据都搞不定！”那你可就冤枉LR了，原始特征非线性，完全可以通过转换变成线性或近似线性，比如做个简单的离散化就会大不一样：<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">#demo_data2.py</span></span><br><span class="line"><span class="keyword">import</span> sys</span><br><span class="line"><span class="keyword">from</span> random <span class="keyword">import</span> random</span><br><span class="line"></span><br><span class="line">n = int(sys.argv[<span class="number">1</span>])</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> range(n):</span><br><span class="line">    x = <span class="number">2</span> * random() - <span class="number">1.0</span></span><br><span class="line">    y = <span class="number">2</span> * random() - <span class="number">1.0</span></span><br><span class="line">    label = <span class="number">1</span></span><br><span class="line">    <span class="keyword">if</span> abs(x) + abs(y) &lt; <span class="number">1.0</span>:</span><br><span class="line">        label = <span class="number">0</span></span><br><span class="line">    fx = <span class="string">"x"</span> + str(int(x*<span class="number">10</span>)) + <span class="string">":1"</span></span><br><span class="line">    fy = <span class="string">"y"</span> + str(int(y*<span class="number">10</span>)) + <span class="string">":1"</span></span><br><span class="line">    <span class="keyword">print</span> str(label) + <span class="string">" "</span> + fx + <span class="string">" "</span> + fy</span><br></pre></td></tr></table></figure></p>
-<p>　　重新生成1万条训练样本和2000条测试样本：</p>
-<p>　　<code>python demo_data2.py 10000 &gt; train.txt</code></p>
-<p>　　<code>python demo_data2.py 2000 &gt; test.txt</code></p>
-<p>　　此时你会发现，无论LR、FM还是PLM，AUC都很容易达到0.99以上。</p>
-<p>　　而在我们广告业务的真实数据中，LR所面对的几乎都是千万维或上亿维的高维离散特征，效果并不会比FM或PLM差太多。我在真实数据的实验也验证了这一点，PLM和FM相比LR提升的都差不多，AUC基本都是在千分位提高几个点。</p>
-
-          
-        
-      </div>
-      <footer>
-        
-          <div class="alignright">
-            <a href="/2017/06/01/mlr_plm/#more" class="more-link">Continue Reading<i class="fa fa-long-arrow-right fa-1"></i></a>
           </div>
         
         <div class="clearfix"></div>
