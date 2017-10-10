@@ -118,6 +118,134 @@ body{ -webkit-animation: bugfix infinite 1s; }
           <div class="icon"></div>
             
     
+      <h1 class="title transition"><a href="/2017/10/08/explore_exploit/">Paper Reading: Explore and Exploit</a></h1>
+    
+  
+          <ul>
+            <li>
+              <span class="heading-span">Posted on: </span>
+              <time datetime="2017-10-08T10:18:23.000Z">Oct 8 2017</time>
+            </li>
+            
+              <li>
+                <span class="heading-span">By: </span>
+
+                
+                  <a href="/">CastellanZhang</a>
+                
+
+              </li>
+            
+            <li>
+              <span class="heading-span">With: </span>
+              
+          </ul>
+        </header>
+      
+      <div class="entry">
+        
+          
+            <h1 id="u8BBA_u6587_u5B66_u4E60_uFF1AExplore_and_Exploit"><a href="#u8BBA_u6587_u5B66_u4E60_uFF1AExplore_and_Exploit" class="headerlink" title="论文学习：Explore and Exploit"></a>论文学习：Explore and Exploit</h1><h2 id="u524D_u8A00"><a href="#u524D_u8A00" class="headerlink" title="前言"></a>前言</h2><p>　　前阵子读了一篇KDD2017的论文”A Practical Exploration System for Search Advertising”，是有关E&amp;E算法的，放假无事便调研了一些相关资料，做个小结。</p>
+<p>　　计算广告和推荐系统中经常会碰到某些长尾广告或长尾item从来没有机会或者很少机会的展示，导致CTR预估非常不准，需要探索性地创造机会给它们一定的展示量，但又不能带来太大的损失。这种问题一般称作Explore and Exploit问题。</p>
+<p>　　在学术界经常把它描述成为一个多臂赌博机问题(multi-armed bandit problem, MAB)，若干台赌博机，每次可以选择一台机器摇一下，有一定概率会吐钱出来，但各台机器吐钱概率不一致且未知，那么赌徒每次该如何选择来最大化收益？对于K-armed bandit problem数学定义为：</p>
+<p>　　$i$ 为机器下标，$1\le i\le K$ ，每台机器对应一组随机变量$X_{i,1},X_{i,2},X_{i,3}…$，表示每次被选中后的收益，这组随机变量独立同分布，期望 $\mu_i$未知。</p>
+<p>　　策略A是一个算法，每次选择一台机器获得其收益，定义$T_i(n)$ 为前n次选择中机器$i$被选中的次数，定义策略A的前n次选择的regret为：<br>$$<br>\mu^*n-\mu_j\sum_{j=1}^{K}E[T_j(n)]<br>$$<br>　　其中<br>$$<br>\mu^*\mathop{=}^{def}\max_{1\le i\le K}\mu_i<br>$$<br>　　regret越小表示策略A越好，看起来有点像online learning的regret定义。下面总结几种最近调研的E&amp;E算法。</p>
+<h2 id="u4E00_uFF1A_u7EAF_u968F_u673A"><a href="#u4E00_uFF1A_u7EAF_u968F_u673A" class="headerlink" title="一：纯随机"></a>一：纯随机</h2><p>　　最简单的办法，每次随机选。</p>
+<h2 id="u4E8C_uFF1A_u6700_u5927_u5747_u503C"><a href="#u4E8C_uFF1A_u6700_u5927_u5747_u503C" class="headerlink" title="二：最大均值"></a>二：最大均值</h2><p>　　先随机选若干次，然后一直选均值最大的。</p>
+<h2 id="u4E09_uFF1A_24_5Cepsilon_24-Greedy"><a href="#u4E09_uFF1A_24_5Cepsilon_24-Greedy" class="headerlink" title="三：$\epsilon$-Greedy"></a>三：$\epsilon$-Greedy</h2><p>　　设定参数 $\epsilon\in(0,1]$，每次以 $\epsilon$ 的概率随机选一个机器，否则选择当前收益均值最大的机器。</p>
+<p>　　论文[1]中给出了一个变种算法：$\epsilon_n$-Greedy，具体为 $\epsilon$ 不再固定，而是以1/n的速率衰减，可以证明比原始方法有更好的regret。具体见论文[1]的Theorem 3。</p>
+<h2 id="u56DB_uFF1AThompson_Sampling"><a href="#u56DB_uFF1AThompson_Sampling" class="headerlink" title="四：Thompson Sampling"></a>四：Thompson Sampling</h2><p>　　对于收益为1和0二值的情况，可以假定每台机器$i$收益符合参数为$p_i$的伯努利分布，假定参数 $p_i\sim Beta(\alpha_i,\beta_i)$，（搞过LDA的应该都知道Beta分布和伯努利分布的共轭关系）。</p>
+<p>　　算法具体为：每一轮每台机器用其当前自身的Beta分布生成一个数$p$，本轮选择$p$最大的那台机器，假定下标为$i$；然后观察其收益，如果为1则 $\alpha_i$加1，为0则 $\beta_i$加1。</p>
+<h2 id="u4E94_uFF1AUCB_28Upper_Confidence_Bound_29"><a href="#u4E94_uFF1AUCB_28Upper_Confidence_Bound_29" class="headerlink" title="五：UCB(Upper Confidence Bound)"></a>五：UCB(Upper Confidence Bound)</h2><p>　　论文[1]中不止一个UCB，这里只介绍最简单的UCB1。</p>
+<p>　　1. 初始化：每台机器选择一次</p>
+<p>　　2. 循环：选择机器$i$，满足<br>$$<br>i=\mathop{\arg\max}_{1\le j\le K}(\bar x_j+\sqrt{\frac{2\ln n}{n_j}})<br>$$<br>　　其中，$\bar x_j$是机器$j$的平均收益，$n_j$是机器$j$被选中的次数，$n$为总的轮次数。</p>
+<p>　　算法思想很明白，历史均值加上一个置信区间来估计本轮的收益，历史被选中的次数越少则置信区间越大，会加大被选中的机会。</p>
+<p>　　可以证明，UCB的regret量级为O(log n)，具体证明过程见论文[1]，证明过程比较复杂，我看了很久才看明白，会用到Chernoff-Hoeffding bound不等式和1/n^2的无穷级数求和。</p>
+<h2 id="u516D_uFF1ALinUCB"><a href="#u516D_uFF1ALinUCB" class="headerlink" title="六：LinUCB"></a>六：LinUCB</h2><p>　　LinUCB算法是雅虎2010年提出的，用于新闻推荐，见论文[2]。考虑到前面几种算法都过于简单，根本没有考虑到个性化的问题，不同的user对于同样的item的期望收益（比如CTR）也是不一样的，且item本身也可能随时间动态变化，因此论文[2]重新定义了考虑上下文的MAB问题，在第t轮：</p>
+<p>　　1. 算法A观察到当前用户$u_t$和当前的item候选集$A_t$，对于每一个$a\in A_t$和当前$u_t$，有一个特征向量$x_{t,a}$，即代表上下文</p>
+<p>　　2. 通过前t-1轮的收益结果，算法A选择一个$a_t\in A_t$，然后得到收益$r_{t,a_t}$，这里 $r_{t,a_t}$ 的期望与$u_t$和$a_t$都有关</p>
+<p>　　3. 根据新的观测值 $(x_{t,a_t},a_t,r_{t,a_t})$，算法A更新选择策略</p>
+<p></p><p><br>　　论文[2]中给出两种LinUCB，我们这里只说相对简单的第一种。</p>
+<p>　　LinUCB假定$r_{t,a}$ 的期望值和 $x_{t,a}$ 成线性关系，这也是LinUCB名字的来历，具体为：<br>$$<br>E[r_{t,a}|x_{t,a}]=x_{t,a}^T\theta_a^*<br>$$<br>　　可以看到每一个item $a$对应一个未知参数 $\theta_a^*$，可以通过历史数据来估计。假定在第t轮的时候，$a$被选中过m次，对应的特征向量和收益构成训练数据 $(D_a,c_a)$，$D_a$为$m\times d$矩阵，即m个特征向量，$c_a$为$m\times 1$向量，即m个收益。</p>
+<p>　　通过岭回归可以得到 $\theta_a^*$ 的估计值：<br>$$<br>\hat\theta_a=(D_a^TD_a+I_d)^{-1}D_a^Tc_a<br>$$<br><br></p>
+<hr style="height:1px;border:none;border-top:1px dashed #0066CC;">
+
+<h3 id="u5907_u6CE8-_u5CAD_u56DE_u5F52_u7684_u63A8_u5BFC_uFF1A"><a href="#u5907_u6CE8-_u5CAD_u56DE_u5F52_u7684_u63A8_u5BFC_uFF1A" class="headerlink" title="备注-岭回归的推导："></a>备注-岭回归的推导：</h3><p>　　对于线性回归$D\theta=c$，采用最小二乘和L2正则项来估计参数 $\theta$.<br>$$<br>\min_\theta f(\theta)=\min_\theta||c-D\theta||_2^2+\lambda||\theta||_2^2\\<br>f(\theta)=(c-D\theta)^T(c-D\theta)+\lambda\theta^T\theta\\<br>\Rightarrow df=(d(c-D\theta))^T(c-D\theta)+(c-D\theta)^Td(c-D\theta)+\lambda(d\theta)^T\theta+\lambda\theta^Td\theta\\<br>=2(c-D\theta)^Td(c-D\theta)+2\lambda\theta^Td\theta\\<br>=-2(c-D\theta)^TDd\theta+2\lambda\theta^Td\theta<br>$$<br>　　令$df=0$，有<br>$$<br>D^T(c-D\theta)=\lambda\theta\\<br>\Rightarrow D^Tc=(D^TD+\lambda I)\theta\\<br>\Rightarrow \theta=(D^TD+\lambda I)^{-1}D^Tc<br>$$</p>
+<p><hr style="height:1px;border:none;border-top:1px dashed #0066CC;"><br><br><br>　　回到正题，得到 $\hat\theta_a$后，有：</p>
+<p>　　对于任意 $\delta&gt;0,\alpha=1+\sqrt{\ln(2/\delta)/2}$，<br>$$<br>P\left\{\left|x_{t,a}^T\hat\theta_a-E[r_{t,a}|x_{t,a}]\right|\le\alpha\sqrt{x_{t,a}^T(D_a^TD_a+I_d)^{-1}x_{t,a}}\right\}\ge1-\delta<br>$$<br>　　这部分的推导要用到论文[3]的定理，我还没来得及细看。</p>
+<p>　　有了这个置信区间的不等式，就可以类似UCB算法一样，在第t轮选择：<br>$$<br>a_t\mathop{=}^{def}\mathop{\arg\max}_{a\in A_t}\left(x_{t,a}^T\hat\theta_a+\alpha\sqrt{x_{t,a}^T(D_a^TD_a+I_d)^{-1}x_{t,a}}\right)<br>$$<br>　　算法具体如下图：</p>
+<p><img src="/img/LinUCB.jpg" alt=""></p>
+<p>　　可以看到，算法涉及矩阵求逆等运算，如果特征向量维度很高，计算会很复杂。因此论文[2]介绍了如何构建特征，主要是如何降维。user相关的原始特征1193维，item相关的原始特征83维，user特征用 $\phi_u$ 表示，item特征用 $\phi_a$ 表示。用LR构建点击模型来拟合历史数据，不过线性部分比较特别，形式为 $\phi_u^TW\phi_a$，即考虑了user和item的所有二阶特征组合，通过LR训练出参数矩阵$W$后，将user特征投影到item的特征空间：<br>$$<br>\psi_u\mathop{=}^{def}\phi_u^TW<br>$$<br>　　然后再聚类为5个簇，再加上偏置项，即特征向量 $x_{t,a}$ 一共只有6维，计算将大大简化。</p>
+<p>　　论文[2]还有一个有意思的部分，介绍了如何offline来评估E&amp;E算法的好坏。比如我们有一份完全随机策略的log数据，希望能够线下评估我们新的E&amp;E算法A，具体为：</p>
+<p>　　1. 依次扫描log数据的每一条记录，如果展示的item和算法A给出的不一致，则丢弃该条记录，直到找到和算法A一致的一条记录</p>
+<p>　　2. 该记录加入到算法A的历史，算法A更新选择策略</p>
+<p>　　3. 该记录的收益加入到A的总收益，如果A的历史记录不够T条，回到第1步，从上次的位置继续扫描</p>
+<p>　　4. 直到A的历史数据达到T条，最后输出总收益除以T</p>
+<h2 id="u4E03_uFF1AExploration_Algorithm_for_Search_Ads"><a href="#u4E03_uFF1AExploration_Algorithm_for_Search_Ads" class="headerlink" title="七：Exploration Algorithm for Search Ads"></a>七：Exploration Algorithm for Search Ads</h2><p>　　前面的算法都是把E&amp;E独立出来讲，假如我们的业务已经有了一个click model，那该如何和E&amp;E结合呢？A Practical Exploration System for Search Advertising[4]给出了一个很好的方案。这篇论文来自KDD2017，是雅虎搜索广告团队的工作。</p>
+<p>　　冷启动问题特化到计算广告领域，就是指广告主向广告系统提交新的广告，系统很难准确预估新广告的CTR，带来的后果是新的广告可能拿不到多少展示量，click model不能很快学习到这些“冷广告”的点击概率，影响整体效果（比如收入）。</p>
+<p>　　仔细分析，如果对新广告的CTR预估高了还好一些，初期就会有足够的展示量，只要模型更新及时，很快学习到更加准确的点击率，然后恢复正常；如果新广告的CTR预估很低，拿不到展示量，模型不能学到准确点击率，即使模型更新，预估还是偏低，恶性循环，导致本来质量不错的新广告永远拿不到量。</p>
+<p>　　因此这篇论文的思想便是对CTR预估较低的新广告做boosting，加大预估CTR，具体实现结合了 $\epsilon$-Greedy和UCB的思路。<br><br></p>
+<hr style="height:1px;border:none;border-top:1px dashed #0066CC;">
+
+<h3 id="u4E00_u4E9B_u80CC_u666F_u77E5_u8BC6_uFF1A"><a href="#u4E00_u4E9B_u80CC_u666F_u77E5_u8BC6_uFF1A" class="headerlink" title="一些背景知识："></a>一些背景知识：</h3><p>　　搜索广告被Matching模块召回，但拿不到展示量的原因主要有：</p>
+<p>　　1. Ad-Quality Filtering(AQF)：广告质量不行被过滤掉，而一般来说预估CTR是质量分的一个重要组成部分，所以预估CTR低了，很可能在这里就被干掉。</p>
+<p>　　2. Reserve Price：出于商业利益，广告系统一般会设定一个最低价格的限制，如果bid*pCTR低于这个最低价格，则连参与竞价的机会都没有。</p>
+<p>　　3. Auction：最后竞价环节，狼多肉少，广告坑位有限，大家按rank-score排序，分高者胜出。而bid*pCTR又是rank-score的最重要组成部分。</p>
+<p>　　显然，这人生的三道坎都与预估CTR直接相关，可见click model何等重要。</p>
+<p>　　click model干的事就是给定搜索词q、广告a、用户u之后，预估u对a的点击概率p(click|q,a,u)，一般都采用基于特征的监督学习模型。而最重要的特征往往是所谓的点击反馈特征，即历史点击数和历史展示数以及二者的比值历史CTR，如果考虑了位置偏置，就变成EC/COEC特征。</p>
+<p>　　EC/COEC在多个雅虎的论文里提到过，不过最早的出处应该是2007年的这篇[5]。简单来说，搜索广告位有多个，比如竖排一列，不同rank的点击率天然就有差异，一般高处rank的偏高，低处rank的偏低，这就是位置偏置。这种天然点击率可以通过统计每一个rank上的所有点击除以所有展示来得到，当然这是一种近似值，因为广告系统会把rank-sore高的广告往高rank处放，这样统计又引入了rank-score偏置，除非开一部分流量完全随机出广告。</p>
+<p>　　我们将每个rank上的天然点击率记为 $ctr(r)$，r为rank编号。比如 $ctr(r_1)$ 是 $ctr(r_2)$ 的两倍，广告A在$r_1$上展示了1000次，点击了100次，广告B在$r_2$上展示了1000次，点击了80次，如果直接将这些数字作为特征的话，模型可能会学出广告A的点击率大于广告B，但其实考虑位置偏置，广告A的点击率小于B才是合理的。</p>
+<p>　　为此定义expected clicks(EC)为某个广告a在rank r上的期望点击数：<br>$$<br>ec(r,a)=ctr(r)*i_r(a)<br>$$<br>其中 $i_r(a)$ 为a在rank r上的实际展示数。</p>
+<p>　　定义clicks over expected clicks(COEC)如下：<br>$$<br>COEC(a)=\frac{\sum_r c(r,a)}{\sum_r ec(r,a)}<br>$$<br>　　其中 $c(r,a)$ 为a在rank r上的实际点击数。</p>
+<p>　　$EC(a)=\sum_r ec(r,a)$ 可以看做是广告a历史展示数的一种normalization，如果非要在绝对值上较真的话可以除以最大的 $ctr(r)$，变成<br>$$<br>EC(a)/\max_r ctr(r)，<br>$$<br>即认为最好位置的展示数1次才算1次，其他位置都要打折。</p>
+<p>　　同理，COEC(a)可以看做是对广告a的历史CTR做normalize，去除位置偏置。</p>
+<p><hr style="height:1px;border:none;border-top:1px dashed #0066CC;"><br><br><br>　　论文算法具体如下图，该算法应放在click model输出预估CTR之后、auction模块之前：</p>
+<p><img src="/img/Exploration_Algorithm_for_Search_Ads.jpg" alt=""></p>
+<p>　　1：输入，包括当前搜索词q，用户u，召回的广告列表，相应的pCTR，出价bids，和每个广告的历史展示数（去除了位置偏置）。还贴心地准备了一个黑名单列表，即在黑名单里的新广告就不要指望boosting了，听天由命吧，应该是防止严重影响用户体验的广告得到boosting。</p>
+<p>　　2：参数，下面碰到了细说。</p>
+<p>　　3：照搬 $\epsilon$-Greedy的思路，只在小流量上做Exploration，论文给出的参数 $\epsilon=0.05$，还是比较保守的。</p>
+<p>　　4：设定一个要参与Exploration的广告候选集E，先置为空集。</p>
+<p>　　5：构建候选集E，对所有召回的广告，如果pCTR小于阈值 $p_{th}$ 且历史展示数小于阈值 $n_{th}$ 且不在黑名单的，加入E。即只对足够新的、预估CTR偏低的广告做Exploration。论文给出的参数 $n_{th}=500$，$p_{th}$ 和AQF模块的阈值一致，为0.02。</p>
+<p>　　6：E集合还是偏大，做不到人人有份，所以要抽签决定最终参与boosting的广告，最多 $r_{max}$ 个，论文给出的 $r_{max}$ 只有2。这里抽签的方法要细讲一下，因为论文是把这个作为一个创新点的。抽签采用轮盘赌的方式而不是纯随机，bid越大，被选中的概率越大。这样做的好处有三，一是选出bid高的，最终在auction环节胜出的几率也大，否则折腾半天都白费功夫了；二是保证整体的price-per-click(PPC)够高，防范Exploration带来收入上的损失；三是给了广告主一个正反馈，广告主经常抱怨我在你们这投了新广告钱出的老高怎么量不见涨啊，这下好了，给钱好办事，你出价高我给你量就多，一定程度上还能刺激收入。</p>
+<p>　　7：最重要的boosting，将pCTR变大，仿照的是UCB的思路，即在原来pCTR的基础上加上个置信区间。这里的置信区间给的有些任性，论文似乎想从伯努利分布的标准差推导出来，但很不严谨。不管了，反正还有两个参数要调，$\beta$ 是防止分母为0，$\alpha$ 要好好调调，保证boosting之后的广告能有80%越过AQF那道坎。</p>
+<p>　　8：形成最终集合F，经过boosting的广告和剩下的广告合并。这里公式似乎有误，$k\in T\setminus[m]$ 应该是 $k\in [m]\setminus T$。</p>
+<p>　　9：把最终集合F送到auction模块。</p>
+<p></p><p><br>　　算法评估：</p>
+<p>　　1. Learning Rate Metrics：论文定义了一个函数，评估新广告从冷变热的速度，实验证明相比对照组，引入boosting后确实变快了。意料之中，无需细说。</p>
+<p>　　2. Business Metrics：这是实打实的指标，相比对照组，RPM提升了1%，CTR和PPC等都有一点提升。</p>
+<p>　　3. Good versus Bad Ads：这个E&amp;E算法前面说了，就是要帮助本来质量不错的新广告不要被淹没，实验发现有9.5%的Good Ads被挽救了回来。</p>
+<p></p><p><br>　　整篇论文给人的感觉就是很“工程”，没有繁琐的理论推导，而有详细的算法框架，原理也很简单直接，还给出了具体参数，最后再给出实际线上效果让你放心。总之就是对我等工程师很友好，拿来即可用，稍微改改就能用到搜索、推荐等领域。</p>
+<p><br></p>
+<hr>
+<p>参考文献：<br>[1] Finite-time Analysis of the Multiarmed Bandit Problem, 2002<br>[2] A Contextual-Bandit Approach to Personalized News Article Recommendation, 2010<br>[3] Exploring compact reinforcement-learning representations with linear regression, 2009<br>[4] A Practical Exploration System for Search Advertising, 2017<br>[5] Comparing Click Logs and Editorial Labels for Training Query Rewriting, 2007</p>
+
+          
+        
+      </div>
+      <footer>
+        
+          <div class="alignright">
+            <a href="/2017/10/08/explore_exploit/#more" class="more-link">Continue Reading<i class="fa fa-long-arrow-right fa-1"></i></a>
+          </div>
+        
+        <div class="clearfix"></div>
+      </footer>
+    </div>
+</article>
+
+
+
+
+  <article class="post">
+  
+  
+    <div class="post-content-index">
+  
+      
+        <header>
+          <div class="icon"></div>
+            
+    
       <h1 class="title transition"><a href="/2017/07/16/lambdafm/">lambdaFM</a></h1>
     
   
@@ -659,6 +787,10 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <div class="widget recent-post">
   <h3 class="title">最新文章</h3>
   <ul class="entry">
+    
+      <li>
+        <a href="/2017/10/08/explore_exploit/">Paper Reading: Explore and Exploit</a>
+      </li>
     
       <li>
         <a href="/2017/07/16/lambdafm/">lambdaFM</a>
