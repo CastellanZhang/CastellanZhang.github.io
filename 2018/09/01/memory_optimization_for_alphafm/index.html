@@ -194,9 +194,9 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>　　至此，fm_train的内存优化之路就走到这里，内存消耗不再是一笔糊涂账，在任务启动前就可以大致预估。设特征维度为d，特征名字符串平常长度（包括结尾\0）为s，模型参数类型为T，则内存消耗的大户包括：</p>
 <p>　　(1) mem_pool上分配特征名字符串，共s*d</p>
 <p>　　(2) mem_pool上分配_Hash_node和vi、v_ni、v_zi三个数组，共(8+8+3*sizeof(T)+3*factor_num*sizeof(T))*d</p>
-<p>　　(3) std::allocator分配的_M_buckets，考虑到rehash时候的内存消耗，共8*1.5*d</p>
-<p>　　加起来一共是(28+3*(1+factor_num)*sizeof(T)+s)*d</p>
-<p>　　比如d为10亿即大概是1G，s=35，factor_num=0，T为double，则内存消耗至少为(28+3*8+35)G=87G，再加上一些额外的消耗，应该不会超过100G。</p>
+<p>　　(3) std::allocator分配的_M_buckets，考虑到rehash时候的内存消耗，共8*1.5*d/load_factor，目前没有修改max_load_factor，还是默认值1，所以load_factor大约分布在0.5~1之间，可得这一项消耗为12*d到24*d之间。如果增大max_load_factor，这里还可以优化，为了效率暂时没动。</p>
+<p>　　加起来一共是(28+3*(1+factor_num)*sizeof(T)+s)*d到(40+3*(1+factor_num)*sizeof(T)+s)*d</p>
+<p>　　比如d为10亿即大概是1G，s=35，factor_num=0，T为double，则内存消耗为(28+3*8+35)G=87G到(40+3*8+35)G=99G，再加上一些额外的消耗，最多应该100G左右。</p>
 <h2 id="10-__u4F18_u5316fm_predict_u7684_u5185_u5B58_u5360_u7528"><a href="#10-__u4F18_u5316fm_predict_u7684_u5185_u5B58_u5360_u7528" class="headerlink" title="10. 优化fm_predict的内存占用"></a>10. 优化fm_predict的内存占用</h2><p>　　优化fm_train之后，再来优化fm_predict。之前偷懒，预测时也会把完整模型加载到内存，导致内存消耗基本和fm_train一致，其实对于预测只需要加载非零的wi和vi项，其他的w_ni、w_zi、v_ni、v_zi都不需要，这样优化后，内存消耗和fm_train比基本可以忽略了。</p>
 <h2 id="11-_gcc_u7684_u7248_u672C_u517C_u5BB9_u6027_u95EE_u9898"><a href="#11-_gcc_u7684_u7248_u672C_u517C_u5BB9_u6027_u95EE_u9898" class="headerlink" title="11. gcc的版本兼容性问题"></a>11. gcc的版本兼容性问题</h2><p>　　代码中涉及到了gcc的STL具体实现，而gcc不同的版本之间实现代码还有差异，真是一个糟心的问题。我对比测试了4.8.5和5.4.0以及7.3.0版本，为了兼容它们，利用了C++模板一种称作SFINAE的“奇技淫巧”，具体不展开了。之前看到SFINAE的时候觉得这玩意儿完全无实用价值，没想到这次就用到了，啪啪打脸。</p>
 <p>　　gcc版本太多，我不可能每个版本都编译测试一下，只能乐观假定4.8.5和7.3.0之间的都没问题，好吧，这算是线性插值的思路？</p>
