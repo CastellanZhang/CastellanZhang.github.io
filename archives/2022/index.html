@@ -151,37 +151,36 @@ body{ -webkit-animation: bugfix infinite 1s; }
           
             <h1 id="Transformer_u505A_u7684_u5343_u5C42_u997C"><a href="#Transformer_u505A_u7684_u5343_u5C42_u997C" class="headerlink" title="Transformer做的千层饼"></a>Transformer做的千层饼</h1><h1 id="1-__u524D_u8A00"><a href="#1-__u524D_u8A00" class="headerlink" title="1. 前言"></a>1. 前言</h1><p>Transformer做的千层饼吃过没？</p>
 <p>最近看到一篇微软出的paper[1]，把Transformer堆到了1000层，并在一些NLP任务上取得了很好的效果，叹为观止。不是靠暴力调参，而是有分析，有推导，理论结合实践，整个过程值得仔细学习。不过感觉其中的数学推导有些地方值得商榷，我会按照我的理解重新梳理和补充。paper中不仅分析了只有encoder的结构（比如BERT），还分析了包含decoder的结构，分析过程大同小异，因此为了省事，我在本文中只讨论纯encoder的结构。</p>
-<p><img src="/img/transformer1000_figure1.png" alt="transformer1000_figure1"></p>
+<p><img src="/img/transformer1000_figure1.png" alt=""></p>
 <h1 id="2-__u5177_u4F53_u505A_u6CD5"><a href="#2-__u5177_u4F53_u505A_u6CD5" class="headerlink" title="2. 具体做法"></a>2. 具体做法</h1><p>现在的深度模型都在极度膨胀，变得一个比一个大，有的横向发展，有的纵向拉伸，比如很多人都在玩Transformer垒积木，越垒越高，但始终无法突破1000层。这一次微软的大神们终于冲破玄关，一举成功。</p>
 <p>论文一开始通过实验分析了前人为何失败，问题不在于大家一般认为的梯度爆炸，而是模型更新爆炸，即参数更新后模型输出的增量幅度 $\Vert \Delta F\Vert $ 的爆炸，模型越深，增量幅度越大，导致训练一开始就很容易陷入糟糕的局部最优，反过来又带来梯度消失问题，更加难以摆脱局部最优。</p>
 <p>针对症结所在，对Transformer做了修改，提出DeepNet网络结构。其实改动很小，就是把每个子层中的Post-LN换成了DEEPNORM。代码大概长这个样子：</p>
-<p><img src="/img/transformer1000_code.png" alt="transformer1000_code"></p>
+<p><img src="/img/transformer1000_code.png" alt=""></p>
 <p>DEEPNORM数学公式为：</p>
 <p>$$\mathbf x_{l+1}=LN(\alpha \mathbf x_l+G_l(\mathbf x_l,\theta_l))$$</p>
-<p>其中的 $\alpha$ 为常数，$G_l(\mathbf x_l,\theta_l)$ 是代表第 $l$ 个Transformer的子层（如attention层或FFN层）的函数，$\theta_l$ 为子层的模型参数。公式中看不出来的是，attention层和FFN层中的参数初始化很有讲究，对于attention中的 $W^V$ 和 $W^O$ 、FFN中的 $W^1$ 和 $W^2$，都用nn.init.xavier_normal\_(w, gain=β)初始化；而对于attention中的 $W^Q$ 和 $W^K$ ，用 nn.init.xavier_normal\_(w, gain=1)初始化。</p>
+<p>其中的 $\alpha$ 为常数，$G_l(\mathbf x_l,\theta_l)$ 是代表第 $l$ 个Transformer的子层（如attention层或FFN层）的函数，$\theta_l$ 为子层的模型参数。公式中看不出来的是，attention层和FFN层中的参数初始化很有讲究，对于attention中的 $W^V$ 和 $W^O$ 、FFN中的 $W^1$ 和 $W^2$，都用nn.init.xavier_normal_(w, gain=β)初始化；而对于attention中的 $W^Q$ 和 $W^K$ ，用 nn.init.xavier_normal_(w, gain=1)初始化。</p>
 <h1 id="3-_Xavier_Normal_u521D_u59CB_u5316_u3010_u8865_u5145_u3011"><a href="#3-_Xavier_Normal_u521D_u59CB_u5316_u3010_u8865_u5145_u3011" class="headerlink" title="3. Xavier Normal初始化【补充】"></a>3. Xavier Normal初始化【补充】</h1><p>xavier normal初始化为何方神圣？paper里没讲，我来补充一下。</p>
 <p>先说具体怎么操作，很简单。假设有 $L$ 层全连接层，激活函数为 $f$ ，第 $l$ 层输入为 $n_l$ 维向量 $\mathbf x_l$，状态值为为 $n_{l+1}$ 维向量 $\mathbf y_l$，满足：</p>
-<p>$\mathbf y_l=\mathbf x_lW^l+\mathbf b^l$</p>
-<p>$\mathbf x_{l+1}=f(\mathbf y_l)$</p>
+<p>$$\mathbf y_l=\mathbf x_lW^l+\mathbf b^l$$</p>
+<p>$$\mathbf x_{l+1}=f(\mathbf y_l)$$</p>
 <p>那么参数初始化时，$\mathbf b^l$ 置为0，$W^l$ 每个元素 $w_{ij}$ 均采样自正态分布 $N(0,\sigma_l^2)$，方差 $\sigma_l^2=1/n_l$，即输入维度的倒数。</p>
 <p>（注：xavier normal初始化一般的标准做法是方差 $\sigma_l^2=2/(n_l+n_{l+1})$，为输入和输出维度均值的倒数。这是同时考虑了前向传播输入输出的方差和后向传播梯度的方差都要基本不变，做的折衷方案。对于这篇paper，主要考虑前向传播，所以我认为不采用这种反而更好。）</p>
 <p>这么做有什么用？</p>
 <p>假设第 $l$ 层输入 $\mathbf x_l=(x_{l,1},x_{l,2},…,x_{l,n_l})$ 的每一个元素 $x_{l,i}$ 独立同分布，即方差相同，统一记为 $var[x_l]$ ，在某些条件下，xavier初始化可以使得输出的方差 $var[x_{l+1}]$ 基本不变，如果假设输入输出的均值 $E[x_{l}]=E[x_{l+1}]=0$，则相当于 $E[(x_{l+1})^2]$ 和 $E[(x_{l})^2]$ 相比基本不变，这里 $x_{l+1}$ 和 $x_l$ 分别表示向量 $\mathbf x_{l+1}$ 和 $\mathbf x_l$ 中的任一元素，下同。而 $E[\Vert \mathbf x_{l+1}\Vert ^2]=E[\sum_i(x_{l+1,i})^2]=n_{l+1}E[(x_{l+1})^2]\overset{\mathrm\Theta}{=}n_{l+1}E[(x_{l})^2]=n_{l+1}/n_lE[\Vert \mathbf x_{l}\Vert ^2]$ ，即 $\mathbf x_{l+1}$ 和 $\mathbf x_l$ 相比，模长的量级基本不变，只和维度比值的平方根成正比。这里符号 $\overset{\mathrm\Theta}{=}$ 是仿照paper里的写法，表示量级相同。</p>
-<p>还可以证明，若将 $W^l$ 初始化正太分布的标准差缩放 $\beta$ 倍，即 $\sigma_l^2=\beta^2/n_l$，则 $E[(x_{l+1})^2]\overset{\mathrm\Theta}{=}\beta^2E[(x_{l})^2]$，假设输入输出的维度相同，则 $\mathbf x_{l+1}$ 和 $\mathbf x_l$ 相比，模长 $\Vert \mathbf x_{l+1}\Vert $ 的量级也缩放了 $\beta$ 倍。这就是代码nn.init.xavier_normal\_(w, gain=β)中的参数 gain=β 的作用。</p>
-<p>可能有人已经注意到了，上面的分析都基于输入输出均值为0的假设，但对于ReLU激活函数，根本不成立。没关系，可以证明，稍微修改一下初始化正太分布的方差，让 $\sigma_l^2=2\beta^2/n_l$ 即可，同样可以达到模长缩放 $\beta$ 倍的目的，这正是kaiming初始化的做法。在这篇paper中主要研究量级的变化，对这种常数项的变化都忽略了。</p>
+<p>还可以证明，若将 $W^l$ 初始化正态分布的标准差缩放 $\beta$ 倍，即 $\sigma_l^2=\beta^2/n_l$，则 $E[(x_{l+1})^2]\overset{\mathrm\Theta}{=}\beta^2E[(x_{l})^2]$，假设输入输出的维度相同，则 $\mathbf x_{l+1}$ 和 $\mathbf x_l$ 相比，模长 $\Vert \mathbf x_{l+1}\Vert $ 的量级也缩放了 $\beta$ 倍。这就是代码nn.init.xavier_normal\_(w, gain=β)中的参数 gain=β 的作用。</p>
+<p>可能有人已经注意到了，上面的分析都基于输入输出均值为0的假设，但对于ReLU激活函数，根本不成立。没关系，可以证明，稍微修改一下初始化正态分布的方差，让 $\sigma_l^2=2\beta^2/n_l$ 即可，同样可以达到模长缩放 $\beta$ 倍的目的，这正是kaiming初始化的做法。在这篇paper中主要研究量级的变化，对这种常数项的变化都忽略了。</p>
 <h1 id="4-__u6570_u5B66_u539F_u7406_u5206_u6790"><a href="#4-__u6570_u5B66_u539F_u7406_u5206_u6790" class="headerlink" title="4. 数学原理分析"></a>4. 数学原理分析</h1><p>上面介绍了做法，再来分析这么做为何能将 $\Vert \Delta F\Vert $ 限制住。</p>
 <p>先看Attention子层，论文里简化了分析，只研究1-head的情况：</p>
 <p>设 $Q,K,V\in\mathbf R^{n\times d}$，且 $W^Q,W^K,W^V\in\mathbf R^{d\times d_k}$，$W^O\in\mathbf R^{d_k\times d}$，则Attention操作可以表示为：</p>
-<p>$Attn(Q,K,V)=softmax(\displaystyle\frac{QW^Q(KW^K)^T}{\sqrt{d_k}})VW^VW^O$</p>
+<p>$$<br>Attn(Q,K,V)=softmax(\displaystyle\frac{QW^Q(KW^K)^T}{\sqrt{d_k}})VW^VW^O<br>$$</p>
 <p>比如对于self-attention，三个参数 $Q,K,V$ 都是输入 $X\in\mathbf R^{n\times d}$，Attn输出维度同样是 $n\times d$。</p>
 <p>然后给出一个引理4.1，是为了说明 $W^Q$ 和 $W^K$ 不会影响Attention输出的量级，所以这两项参数初始化无需缩放，gain参数设为1即可。</p>
 <h2 id="4-1__u5F15_u7406"><a href="#4-1__u5F15_u7406" class="headerlink" title="4.1 引理"></a>4.1 引理</h2><p>给定 $X=(\mathbf x_1,\mathbf x_2,…,\mathbf x_n)^T\in\mathbf R^{n\times d}$， 对于任意 $\mathbf x_i$，$i\in[1,n]$，都有 $var(\mathbf x_i)=1,mean(\mathbf x_i)=0$，且有 $q_i\in\mathbf R$，那么</p>
-<p>$softmax(q_1,q_2,…,q_n)X\overset{\mathrm\Theta}{=}\mathbf x_i$</p>
+<p>$$<br>softmax(q_1,q_2,…,q_n)X\overset{\mathrm\Theta}{=}\mathbf x_i<br>$$</p>
 <p>证明：softmax操作后，$\mathbf x_i$ 的权重为 $s_i=e^{q_i}/\sum_{j=1}^n e^{q_j}$，满足 $\sum_{i=1}^n s_i=1$，因此有</p>
-<p>$\displaystyle\Vert softmax(q_1,q_2,…,q_n)X\Vert =\Vert \sum_{i=1}^n s_i\mathbf x_i\Vert \le\sum_{i=1}^n s_i\Vert \mathbf x_i\Vert $</p>
+<p>$$<br>\displaystyle\Vert softmax(q_1,q_2,…,q_n)X\Vert =\Vert \sum_{i=1}^n s_i\mathbf x_i\Vert \le\sum_{i=1}^n s_i\Vert \mathbf x_i\Vert<br>$$</p>
 <p>后面不等号是利用了Jensen不等式。</p>
-<p>而 $var(\mathbf x_i)=1,mean(\mathbf x_i)=0$，是说 $\mathbf x_i$ 中的d个元素的方差为1，均值为0，因此有 $\Vert \mathbf x_i\Vert =\sqrt{d}$，这里论文有误，少了根号。因此</p>
-<p>$\Vert softmax(q_1,q_2,…,q_n)X\Vert \le\Vert \mathbf x_i\Vert =\sqrt{d}$，即可认为 $softmax(q_1,q_2,…,q_n)X$ 和 $\mathbf x_i$ 量级相等。</p>
+<p>而 $var(\mathbf x_i)=1,mean(\mathbf x_i)=0$，是说 $\mathbf x_i$ 中的d个元素的方差为1，均值为0，因此有 $\Vert \mathbf x_i\Vert =\sqrt{d}$，这里论文有误，少了根号。因此 $\Vert softmax(q_1,q_2,…,q_n)X\Vert \le\Vert \mathbf x_i\Vert =\sqrt{d}$，即可认为 $softmax(q_1,q_2,…,q_n)X$ 和 $\mathbf x_i$ 量级相等。</p>
 <p>从证明中可以看出来，所谓量级相等，就是指向量模长的量级相等。</p>
 <p>有了这个引理，我们可以断言 $Attn(Q,K,V)\overset{\mathrm\Theta}{=}VW^VW^O$</p>
 <p>严格来讲，上面等式左右都是 $n\times d$ 的矩阵，这里的量级相等，是指左边矩阵每一个行向量的模长都和右边矩阵任意行向量的模长量级相等。</p>
@@ -189,7 +188,7 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>这么极致简化的合理性在哪里？后文细说。</p>
 <p>定义我们的研究目标 $\Vert \Delta F\Vert =\Vert F(x,\theta^*)-F(x,\theta)\Vert $，然后看看在N层DeepNet（即包含N层Attn和N层FFN）下，$\Vert \Delta F\Vert $ 的量级大小。</p>
 <h2 id="4-2__u5F15_u7406"><a href="#4-2__u5F15_u7406" class="headerlink" title="4.2 引理"></a>4.2 引理</h2><p>给定N层DeepNet $F(x,\theta)(\theta=\{\theta_1,\theta_2,…,\theta_{2N}\})$，其中 $\theta_{2l-1}$ 和 $\theta_{2l}$ 分别表示第 $l$ 层下self-attention子层和FFN子层的参数。（注意：后续涉及层号的下标都是子层的编号，不再特殊说明）</p>
-<p><img src="/img/transformer1000_figure2.png" alt="transformer1000_figure2" style="zoom:50%;"></p>
+<p><img src="/img/transformer1000_figure2.png" alt="" style="zoom:50%;"></p>
 <p>每个子层都通过DEEPNORM: $x_{l+1}=LN(\alpha x_l+G_l(x_l,\theta_l))$ 来归一化，则有</p>
 <p>$$\Vert \Delta F\Vert \le\displaystyle\sum_{i=1}^{2N}\frac{\sqrt{v_i^2+w_i^2}}{\alpha}\Vert \theta_i^*-\theta_i\Vert $$</p>
 <p>证明：</p>
@@ -206,14 +205,16 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>$$x_{l+1}=f_l(x_l,\theta_l)=\displaystyle\frac{\alpha x_l+G_l(x_l)}{\sqrt{var(\alpha x_l+G_l(x_l))}}\overset{\mathrm\Theta}{=}\frac{\alpha+v_lw_l}{\sqrt{\alpha^2+v_l^2w_l^2}}x_l$$</p>
 <p>求一下偏导数的近似：</p>
 <p>$$\displaystyle\frac{\partial f_l}{\partial x_l}\overset{\mathrm\Theta}{=}\frac{\alpha+v_lw_l}{\sqrt{\alpha^2+v_l^2w_l^2}}\overset{\mathrm\Theta}{=}1$$</p>
-<p>$$\displaystyle\frac{\partial f_l}{\partial\theta_l}\overset{\mathrm\Theta}{=}(\frac{\partial f_l}{\partial v_l},\frac{\partial f_l}{\partial w_l})\overset{\mathrm\Theta}{=}\frac{\alpha x_l(\alpha-v_lw_l)}{(\alpha^2+v_l^2w_l^2)^{\frac{3}{2}}}(w_l,v_l)\overset{\mathrm\Theta}{=}\frac{x_l}{\alpha}(w_l,v_l)$$</p>
+<p>$$<br>\displaystyle\frac{\partial f_l}{\partial\theta_l}\overset{\mathrm\Theta}{=}(\frac{\partial f_l}{\partial v_l},\frac{\partial f_l}{\partial w_l})\overset{\mathrm\Theta}{=}\frac{\alpha x_l(\alpha-v_lw_l)}{(\alpha^2+v_l^2w_l^2)^{\frac{3}{2}}}(w_l,v_l)\overset{\mathrm\Theta}{=}\frac{x_l}{\alpha}(w_l,v_l)<br>$$</p>
 <p>上面两公式最后的近似是我加上的，方便后面的推导。</p>
-<hr>
-<p><strong>【补充】</strong></p>
+<h2 id=""><a href="#" class="headerlink" title=""></a><br></h2><p><strong>【补充】</strong></p>
 <p>再补充一个论文中没有的：</p>
 <p>$$E[\Vert \displaystyle\frac{\partial f_l}{\partial\theta_l}\Vert ^2]\approx E[x_l^2(v_l^2+w_l^2)/\alpha^2]=(v_l^2+w_l^2)/\alpha^2 E[x_l^2]=(v_l^2+w_l^2)/\alpha^2$$</p>
-<p>因此可以认为 $$\Vert \displaystyle\frac{\partial f_l}{\partial\theta_l}\Vert \approx \sqrt{v_l^2+w_l^2}/\alpha$$，这就能解释为何论文中下面的推导 $\Vert \displaystyle\frac{\partial f}{\partial\theta}(x_{2N},\theta_{2N})\Vert $ 中的 $x_{2N}$ 项突然消失不见了。</p>
+<p>因此可以认为</p>
+<p>$$\Vert \displaystyle\frac{\partial f_l}{\partial\theta_l}\Vert \approx \sqrt{v_l^2+w_l^2}/\alpha$$</p>
+<p>这就能解释为何论文中下面的推导 $\Vert \displaystyle\frac{\partial f}{\partial\theta}(x_{2N},\theta_{2N})\Vert $ 中的 $x_{2N}$ 项突然消失不见了。</p>
 <hr>
+<p><br></p>
 <p>开始计算，利用泰勒展开的一阶近似：</p>
 <p>$$\Vert \Delta F\Vert =\Vert F(x,\theta^{*})-F(x,\theta)\Vert =\Vert x_{2N+1}^{*}-x_{2N+1}\Vert =\Vert f_{2N}(x_{2N}^{*},\theta_{2N}^{*})-f(x_{2N},\theta_{2N})\Vert $$</p>
 <p>$$\approx \Vert \displaystyle\frac{\partial f}{\partial x}(x_{2N},\theta_{2N})(x_{2N}^{*}-x_{2N})+\frac{\partial f}{\partial\theta}(x_{2N},\theta_{2N})(\theta_{2N}^{*}-\theta_{2N})^T\Vert $$</p>
@@ -227,7 +228,8 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>这里 $\displaystyle\frac{\partial L}{\partial\theta}$ 表示lost function对模型参数 $\theta$ 的导数。因此有</p>
 <p>$$\displaystyle\Vert \theta_i^*-\theta_i\Vert =\eta\Vert \frac{\partial L}{\partial\theta_i}\Vert \le\eta\Vert \frac{\partial L}{\partial F}\Vert \cdot\Vert \frac{\partial F}{\partial\theta_i}\Vert $$</p>
 <p>常见的任务都是输出 $F$ 之后接一个softmax之类的，假设 $\Vert \displaystyle\frac{\partial L}{\partial F}\Vert $ 有界是合理的，且一般与模型参数和层数N都无关，所以有 $\Vert \displaystyle\frac{\partial L}{\partial F}\Vert =\mathcal O(1)$</p>
-<p> 按照paper里的说法，根据参考文献[2]的结论有，$\Vert \displaystyle\frac{\partial F}{\partial\theta_i}\Vert \le\Vert \frac{\partial F}{\partial\theta_{2N}}\Vert \overset{\mathrm\Theta}{=}\sqrt{v_{2N}^2+w_{2N}^2}/\alpha$</p>
+<p> 按照paper里的说法，根据参考文献[2]的结论有 $\Vert \displaystyle\frac{\partial F}{\partial\theta_i}\Vert \le\Vert \frac{\partial F}{\partial\theta_{2N}}\Vert \overset{\mathrm\Theta}{=}\sqrt{v_{2N}^2+w_{2N}^2}/\alpha$</p>
+<p><br></p>
 <hr>
 <p><strong>【补充】</strong></p>
 <p>这篇参考文献[2]我去仔细看了，最后的数学推导有些语焉不详，不能让我信服，我们不妨自己推导一下：</p>
@@ -242,41 +244,43 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>对于 $\displaystyle\frac{\partial x_{l+1}}{\partial\theta_l}$，也会变成</p>
 <p>$$\displaystyle\frac{\partial x_{l+1}}{\partial\theta_l}=\frac{\partial f_l}{\partial\theta_l}\overset{\mathrm\Theta}{=}(\frac{\partial f_l}{\partial v_l},\frac{\partial f_l}{\partial w_l}) \overset{\mathrm\Theta}{=}\frac{\alpha x_l(I\alpha-v_lw_l)}{(\alpha^2+v_l^2w_l^2)^{\frac{3}{2}}}(w_l,v_l)\overset{\mathrm\Theta}{=}\frac{Ix_l}{\alpha}(w_l,v_l)$$</p>
 <p>$$\displaystyle E[\Vert \frac{\partial x_{l+1}}{\partial\theta_l}\Vert ^2]\overset{\mathrm\Theta}{=}E[I^2x_l^2(v_l^2+w_l^2)/\alpha^2]=(v_l^2+w_l^2)/\alpha^2 E[x_l^2]=(v_l^2+w_l^2)/\alpha^2=(v^2+w^2)/\alpha^2$$</p>
-<p>因此可以认为 $$\displaystyle\Vert \frac{\partial x_{l+1}}{\partial\theta_l}\Vert \overset{\mathrm\Theta}{=}\sqrt{v^2+w^2}/\alpha$$，跟前面结论一致。</p>
+<p>因此可以认为 $\displaystyle\Vert \frac{\partial x_{l+1}}{\partial\theta_l}\Vert \overset{\mathrm\Theta}{=}\sqrt{v^2+w^2}/\alpha$，跟前面结论一致。</p>
 <p>综上，就有</p>
 <p>$$\displaystyle\Vert \frac{\partial F}{\partial\theta_i}\Vert \le\Vert \prod_{l=i+1}^{2N}\frac{\partial x_{l+1}}{\partial x_l}\Vert \cdot\Vert \frac{\partial x_{i+1}}{\partial\theta_i}\Vert \le\Vert \frac{\partial x_{i+1}}{\partial\theta_i}\Vert \overset{\mathrm\Theta}{=}\sqrt{v^2+w^2}/\alpha\overset{\mathrm\Theta}{=}\Vert \frac{\partial F}{\partial\theta_{2N}}\Vert $$</p>
 <p>这样就跟paper中结论一致了。</p>
 <hr>
+<p><br></p>
 <p>继续顺着paper的思路，有了引理4.2，再根据上面的分析，就有</p>
 <p>$$\displaystyle\Vert \Delta F\Vert \le\sum_{i=1}^{2N}\frac{\sqrt{v_i^2+w_i^2}}{\alpha}\Vert \theta_i^*-\theta_i\Vert \le\eta\sum_{i=1}^{2N}\frac{\sqrt{v_i^2+w_i^2}}{\alpha}\Vert \frac{\partial L}{\partial F}\Vert \cdot\Vert \frac{\partial F}{\partial\theta_i}\Vert \le\mathcal O(\eta\sum_{i=1}^{2N}(\frac{\sqrt{v_i^2+w_i^2}}{\alpha})^2=\mathcal O(\eta\cdot2N\frac{v^2+w^2}{\alpha^2})$$</p>
 <p>因此只需要让 $\displaystyle 2N\frac{v^2+w^2}{\alpha^2}=1$，即可满足 $\Vert \Delta F\Vert =\mathcal O(\eta)$，论文中令 $\alpha=(2N)^{1/4},v=w=\beta=(8N)^{-1/4}$ ，这就是本文开头表格中两个参数 $\alpha,\beta$ 取值的来历。</p>
+<p><br></p>
 <hr>
 <p><strong>【补充】</strong></p>
 <p>看起来 $\alpha,\beta$ 的取法还可以有其他形式，论文中也没有详细说当前这种取值的原因，只说是为了平衡残差连接和初始化的影响。我们可以试着猜测一下。</p>
 <p>回过头来看一下 $\theta_i$ 的SGD更新过程：$\displaystyle\Vert \Delta\theta_i\Vert =\Vert \theta_i^{*}-\theta_i\Vert =\eta\Vert \frac{\partial L}{\partial\theta_i}\Vert =\mathcal O(\eta\frac{\Vert \theta_i\Vert }{\alpha})$，如果 $\alpha$ 太小，则 $\theta_i$ 更新过快，没迭代几步就大幅偏离我们精心设计的初始值，影响千层大业；如果 $\alpha$ 太大，则可能收敛太慢，得不偿失。</p>
 <p>考虑到初始阶段 $\Vert \theta_i\Vert \ll1$ ，是一个很小的值，我们不妨将 $1/\alpha$ 设为初始化阶段的 $\Vert \theta_i\Vert $，得到 $\Vert \Delta\theta_i\Vert =\mathcal O(\eta\displaystyle\Vert \theta_i\Vert ^2)$，而 $\Vert \theta_i\Vert ^2$ 是比 $\Vert \theta_i\Vert $ 更小的值，这样更新量看起来比较适中，因此有 $1/\alpha=\Vert \theta_i\Vert =\sqrt{v^2+w^2}=\sqrt2\beta$，代入 $\displaystyle 2N\frac{v^2+w^2}{\alpha^2}=2N\frac{\beta^2+\beta^2}{\alpha^2}=1$，正好得到 $\alpha=(2N)^{1/4},v=w=\beta=(8N)^{-1/4}$，完美。</p>
 <hr>
+<p><br></p>
 <h1 id="5-_One_More_Thing_uFF0C_u76F4_u63A5_u77E9_u9635_u7248_u7684_u63A8_u5BFC_u3010_u8865_u5145_u3011"><a href="#5-_One_More_Thing_uFF0C_u76F4_u63A5_u77E9_u9635_u7248_u7684_u63A8_u5BFC_u3010_u8865_u5145_u3011" class="headerlink" title="5. One More Thing，直接矩阵版的推导【补充】"></a>5. One More Thing，直接矩阵版的推导【补充】</h1><p>看完论文，一边赞叹，一边却又总感觉不踏实。论文中把向量和矩阵都简化成标量来推导真的合理吗？难道在实际情况下，$\alpha$ 和 $\beta$ 的取值与输入向量的维度以及参数矩阵的维度一点关系没有？还有multi-head降为1-head不影响结论？想不明白那就直接推一把。</p>
-<p>想一下真实场景包含2N个子层的Transformer网络，第 $l$ 层的输入为 $n\times d$ 矩阵 $X_l$，包含n个d维向量 $\mathbf x_{l,p}$，$p=1,2,…,n$，输出同样</p>
-<p>为 $n\times d$ 矩阵 $X_{l+1}$，包含n个d维向量 $\mathbf x_{l+1,p}$，$p=1,2,…,n$，所以网络最后的输出 $F=X_{2N+1}$，同样是一个 $n\times d$ 矩阵。</p>
+<p>想一下真实场景包含2N个子层的Transformer网络，第 $l$ 层的输入为 $n\times d$ 矩阵 $X_l$，包含n个d维向量 $\mathbf x_{l,p}$，$p=1,2,…,n$，输出同样为 $n\times d$ 矩阵 $X_{l+1}$，包含n个d维向量 $\mathbf x_{l+1,p}$，$p=1,2,…,n$，所以网络最后的输出 $F=X_{2N+1}$，同样是一个 $n\times d$ 矩阵。</p>
 <p>我们用 $\Delta F$ 的Frobenius范数 $\Vert \Delta F\Vert _F$ 来估计大小，而 $\Vert \Delta F\Vert _F^2=\displaystyle\sum_{p=1}^n\Vert \Delta\mathbf x_{2N+1,p}\Vert _2^2\le(\sum_{p=1}^n\Vert \Delta \mathbf x_{2N+1,p}\Vert _2)^2$，因此有 $\displaystyle\Vert \Delta F\Vert _F\le\sum_{p=1}^n\Vert \Delta\mathbf x_{2N+1,p}\Vert _2$</p>
 <p>我们可以先估计右边任意一项 $\Vert \Delta\mathbf x_{2N+1,p}\Vert _2$ 的大小。因为是任意项，下面推导省略下标 $p$。</p>
 <p>因为有两种子层，FFN和Attention，我们分两种情况讨论：</p>
-<h2 id="5-1_FFN_u5B50_u5C42"><a href="#5-1_FFN_u5B50_u5C42" class="headerlink" title="5.1 FFN子层"></a>5.1 FFN子层</h2><p><strong>一些设定：</strong></p>
-<p>层号为偶数的都是FFN子层，如最后一层，层号为2N，输入为 $\mathbf x_{2N}$，输出为 $\mathbf x_{2N+1}$，就是一个FFN子层。考虑任意一个FFN子层，输入行向量用 $\mathbf x$ 表示，输出行向量用 $\mathbf x_{l+1}=f(\mathbf x,\theta)$ 表示。</p>
-<p>由于输入 $\mathbf x$ 来自于下面一层的输出，经过了LN函数，所以 $\mathbf x$ 的每个元素 $x_i$，有 $E[x_i]=0,E[x_i^2]=1$。我们假定第一层的输入也符合，这也是比较合理的，第一层输入来自于word embedding初始化和position embedding初始化的叠加，仍然可以是正太分布，那么就可以选择合适的参数使其符合。</p>
+<h2 id="5-1_FFN_u5B50_u5C42"><a href="#5-1_FFN_u5B50_u5C42" class="headerlink" title="5.1 FFN子层"></a>5.1 FFN子层</h2><h3 id="u4E00_u4E9B_u8BBE_u5B9A_uFF1A"><a href="#u4E00_u4E9B_u8BBE_u5B9A_uFF1A" class="headerlink" title="一些设定："></a>一些设定：</h3><p>层号为偶数的都是FFN子层，如最后一层，层号为2N，输入为 $\mathbf x_{2N}$，输出为 $\mathbf x_{2N+1}$，就是一个FFN子层。考虑任意一个FFN子层，输入行向量用 $\mathbf x$ 表示，输出行向量用 $\mathbf x_{l+1}=f(\mathbf x,\theta)$ 表示。</p>
+<p>由于输入 $\mathbf x$ 来自于下面一层的输出，经过了LN函数，所以 $\mathbf x$ 的每个元素 $x_i$，有 $E[x_i]=0,E[x_i^2]=1$。我们假定第一层的输入也符合，这也是比较合理的，第一层输入来自于word embedding初始化和position embedding初始化的叠加，仍然可以是正态分布，那么就可以选择合适的参数使其符合。</p>
 <p>将子层的前向计算分解如下：</p>
 <p>$$\mathbf x_{l+1}=f(\mathbf x,\theta)=\mathrm{LN}(\mathbf z)$$</p>
 <p>$$\mathbf z=\alpha\mathbf x+\mathrm{FFN}(\mathbf x,\theta)=\alpha\mathbf x+\mathrm{ReLU}(\mathbf xW)V$$</p>
-<p>其中 $$W\in\mathbf R^{d\times m}$$，$$V\in\mathbf R^{m\times d}$$，一般有 $m\ge d$，我们定义一个算子 $vec$ ，$vec(W)$ 表示把矩阵 $W$ 展开为行向量，则网络参数可以统一写成行向量形式： $\theta=(vec(V),vec(W))$。根据我们前面介绍的xavier normal初始化，$W$ 的每一个元素 $w_{ij}\sim N(0,2w^2/d)$，即有 $E(w_{ij})=0,E(w_{ij}^2)=2w^2/d$，同样 $V$ 的每一个元素 $v_{ij}\sim N(0,v^2/m)$，$E(v_{ij})=0,E(v_{ij}^2)=v^2/m$。$\alpha$，$v$ 和 $w$ 即为我们最终要确定的参数。</p>
+<p>其中 $W\in\mathbf R^{d\times m}$，$V\in\mathbf R^{m\times d}$，一般有 $m\ge d$，我们定义一个算子 $vec$ ，$vec(W)$ 表示把矩阵 $W$ 展开为行向量，则网络参数可以统一写成行向量形式： $\theta=(vec(V),vec(W))$。根据我们前面介绍的xavier normal初始化，$W$ 的每一个元素 $w_{ij}\sim N(0,2w^2/d)$，即有 $E(w_{ij})=0,E(w_{ij}^2)=2w^2/d$，同样 $V$ 的每一个元素 $v_{ij}\sim N(0,v^2/m)$，$E(v_{ij})=0,E(v_{ij}^2)=v^2/m$。$\alpha$，$v$ 和 $w$ 即为我们最终要确定的参数。</p>
 <p>$\mathbf z$ 的任意元素 $z_i$ 为：</p>
 <p>$$\displaystyle z_i=\alpha x_i+\sum_{j=1}^d\sum_{k=1}^m x_jw_{jk}v_{ki}R_k$$</p>
 <p>其中 $R_k$ 为随机变量，取值为1或0，表示ReLU函数的第 $k$ 维标量输入是否大于0，根据初始化阶段的对称性，$R_k$ 取1和0的概率均为0.5。</p>
-<p><strong>计算偏导数：</strong></p>
-<p>我们把 $\mathbf z$ 函数的Jacobian矩阵的每一个元素都单独写出来：</p>
+<p><br></p>
+<h3 id="u8BA1_u7B97_u504F_u5BFC_u6570_uFF1A"><a href="#u8BA1_u7B97_u504F_u5BFC_u6570_uFF1A" class="headerlink" title="计算偏导数："></a>计算偏导数：</h3><p>我们把 $\mathbf z$ 函数的Jacobian矩阵的每一个元素都单独写出来：</p>
 <p>$$\displaystyle\frac{\partial z_i}{\partial x_j}=\delta_{ij}\alpha+\sum_{k=1}^m w_{jk}v_{ki}R_k$$</p>
 <p>当 $i=j$ 时，$\delta_{ij}=1$，否则 $\delta_{ij}=0$。</p>
-<p>$$\displaystyle\frac{\partial z_i}{\partial v_{ki}}=\sum_{j=1}^d x_jw_{jk}R_k$$，$$\displaystyle\frac{\partial z_i}{\partial v_{kj}}=0,if\,j\ne i$$</p>
+<p>$$\displaystyle\frac{\partial z_i}{\partial v_{ki}}=\sum_{j=1}^d x_jw_{jk}R_k$$</p>
+<p>$$\displaystyle\frac{\partial z_i}{\partial v_{kj}}=0,if\,j\ne i$$</p>
 <p>$$\displaystyle\frac{\partial z_i}{\partial w_{jk}}=x_jv_{ki}R_k$$</p>
 <p>而对于LN函数，根据参考文献[2]的结论，有</p>
 <p>$$\displaystyle\Vert \frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\Vert _2\approx\frac{\sqrt{d}}{\Vert \mathbf z\Vert _2}$$</p>
@@ -291,11 +295,12 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>因此我们认为 $\Vert \mathbf z\Vert _2\approx\sqrt{d(\alpha^2+v^2w^2)}$</p>
 <p>所以有$\displaystyle\Vert \frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\Vert _2\approx\frac{\sqrt{d}}{\Vert \mathbf z\Vert _2}\approx\frac{1}{\sqrt{\alpha^2+v^2w^2}}$</p>
 <p>后面我们会多次用到这种通过期望来估计大小的方法。</p>
-<p><strong>计算输出增幅：</strong></p>
-<p>$$\Vert \Delta \mathbf x_{l+1}\Vert _2=\Vert \mathbf x_{l+1}^{*}-\mathbf x_{l+1}\Vert _2=\Vert f(\mathbf x^{*},\theta^{*})-f(\mathbf x,\theta)\Vert _2$$</p>
+<p><br></p>
+<h3 id="u8BA1_u7B97_u8F93_u51FA_u589E_u5E45_uFF1A"><a href="#u8BA1_u7B97_u8F93_u51FA_u589E_u5E45_uFF1A" class="headerlink" title="计算输出增幅："></a>计算输出增幅：</h3><p>$$\Vert \Delta \mathbf x_{l+1}\Vert _2=\Vert \mathbf x_{l+1}^{*}-\mathbf x_{l+1}\Vert _2=\Vert f(\mathbf x^{*},\theta^{*})-f(\mathbf x,\theta)\Vert _2$$</p>
 <p>$$\displaystyle\approx\Vert \frac{\partial f}{\partial \mathbf x}(\mathbf x,\theta)\Delta\mathbf x^T+\frac{\partial f}{\partial vec(V)}(\mathbf x,\theta)\Delta vec(V)^T+\frac{\partial f}{\partial vec(W)}(\mathbf x,\theta)\Delta vec(W)^T\Vert _2$$</p>
 <p>$$\displaystyle=\Vert \frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T+\frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T\Vert _2$$</p>
 <p>$$\displaystyle\le\Vert \frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\Vert _2\cdot\Vert \frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T\Vert _2+\Vert \frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\Vert _2\cdot\Vert \frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T\Vert _2$$</p>
+<p><br></p>
 <p>(1) 先看 $\displaystyle\Vert \frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T\Vert _2$ 这一项：</p>
 <p>$$\displaystyle(\frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T)_i=\sum_{j=1}^d\frac{\partial z_i}{\partial x_j}\Delta x_j^T=\alpha\Delta x_i^T+\sum_{j=1}^d\sum_{k=1}^m w_{jk}v_{ki}R_k\Delta x_j^T$$</p>
 <p>$$\displaystyle E[(\frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T)_i^2]=\alpha^2E[(\Delta x_i)^2]+\sum_{j=1}^d\sum_{k=1}^m\frac{1}{2}E[w_{jk}^2]E[v_{ki}^2]E[(\Delta x_j)^2]$$</p>
@@ -304,6 +309,7 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>$$\displaystyle E[\Vert \frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T\Vert _2^2]=\sum_{i=1}^dE[(\frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T)_i^2]=\alpha^2\sum_{i=1}^dE[(\Delta x_i)^2]+v^2w^2\sum_{j=1}^dE[(\Delta x_j)^2]$$</p>
 <p>$$\displaystyle=(\alpha^2+v^2w^2)\sum_{i=1}^dE[(\Delta x_i)^2]=(\alpha^2+v^2w^2)E[\Vert \Delta\mathbf x\Vert _2^2]$$</p>
 <p>所以 $\displaystyle\Vert \frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T\Vert _2\approx\sqrt{\alpha^2+v^2w^2}\Vert \Delta\mathbf x\Vert _2$</p>
+<p><br></p>
 <p>(2) 再看 $\displaystyle\Vert \frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T\Vert _2$ 这一项：</p>
 <p>$$\displaystyle(\frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T)_i=\sum_{k=1}^m\frac{\partial z_i}{\partial v_{ki}}\Delta v_{ki}+\sum_{j=1}^m\sum_{k=1}^d\frac{\partial z_i}{\partial w_{jk}}\Delta w_{jk}$$</p>
 <p>$$\displaystyle=\sum_{k=1}^m\sum_{j=1}^d x_jw_{jk}R_k\Delta v_{ki}+\sum_{j=1}^m\sum_{k=1}^dx_jv_{ki}R_k\Delta w_{jk}$$</p>
@@ -317,13 +323,15 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>$$=(v^2+w^2)E[\Vert \Delta \theta\Vert _2^2]$$</p>
 <p>【注意这里是刻意凑出和论文一样的结果，其实如果事先设定 $v=w=\beta$，这里上界可以更小，为： $\beta ^2E[\Vert \Delta \theta\Vert _2^2]$ 】</p>
 <p>所以 $\displaystyle\Vert \frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T\Vert _2\approx\sqrt{v^2+w^2}\Vert \Delta\theta\Vert _2$</p>
+<p><br></p>
 <p>(3) 最后整合组装一下：</p>
 <p>$$\Vert \Delta \mathbf x_{l+1}\Vert _2=\Vert \mathbf x_{l+1}^{*}-\mathbf x_{l+1}\Vert _2$$</p>
 <p>$$\displaystyle\le\Vert \frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\Vert _2\cdot\Vert \frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T\Vert _2+\Vert \frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\Vert _2\cdot\Vert \frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T\Vert _2$$</p>
 <p>$$\displaystyle\approx\frac{1}{\sqrt{\alpha^2+v^2w^2}}(\sqrt{\alpha^2+v^2w^2}\Vert \Delta\mathbf x\Vert _2+\sqrt{v^2+w^2}\Vert \Delta\theta\Vert _2)$$</p>
 <p>$$\displaystyle=\Vert \Delta\mathbf x\Vert _2+\frac{\sqrt{v^2+w^2}}{\sqrt{\alpha^2+v^2w^2}}\Vert \Delta\theta\Vert _2$$</p>
 <p>$$\displaystyle&lt;\Vert \Delta\mathbf x\Vert _2+\frac{\sqrt{v^2+w^2}}{\alpha}\Vert \Delta\theta\Vert _2$$</p>
-<p>补上完整的层号下标，就是：</p>
+<p><br></p>
+<p>(4) 补上完整的层号下标，就是：</p>
 <p>$$\Vert \Delta \mathbf x_{l+1}\Vert _2=\Vert \mathbf x_{l+1}^{*}-\mathbf x_{l+1}\Vert _2$$</p>
 <p>$$\displaystyle\le\Vert \Delta\mathbf x_l\Vert _2+\frac{\sqrt{v^2+w^2}}{\alpha}\Vert \Delta\theta_l\Vert _2$$</p>
 <p>$$\displaystyle=\Vert \mathbf x_{l}^{*}-\mathbf x_{l}\Vert _2+\frac{\sqrt{v^2+w^2}}{\alpha}\Vert \theta_{l}^{*}-\theta_{l}\Vert _2$$</p>
@@ -339,6 +347,7 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>$$\Vert \Delta\mathbf x_{2N+1}\Vert _2\le\displaystyle\sum_{i=1}^{2N}\frac{\sqrt{v^2+w^2}}{\alpha}\Vert \theta_i^{*}-\theta_i\Vert $$</p>
 <p>跟论文引理4.2就一致了。后面的过程一模一样，不再赘述。</p>
 <p>最后对比一下，严格来说，完整的输出 $\displaystyle\Vert \Delta F\Vert _F\le\sum_{p=1}^n\Vert \Delta\mathbf x_{2N+1,p}\Vert _2$，跟输入序列长度n相关，这点论文中没有体现。还有，前面5.1的上限推导，如果用 $\beta^2$ 代替 $v^2+w^2$，那么最后推出来的 $\alpha$ 和 $\beta$ 取值会不太一样。</p>
+<p><br></p>
 <h1 id="u53C2_u8003_u6587_u732E"><a href="#u53C2_u8003_u6587_u732E" class="headerlink" title="参考文献"></a>参考文献</h1><p>[1] DeepNet: Scaling Transformers to 1,000 Layers <a href="https://arxiv.org/abs/2203.00555" target="_blank" rel="external">https://arxiv.org/abs/2203.00555</a></p>
 <p>[2] On Layer Normalization in the Transformer Architecture <a href="https://arxiv.org/abs/2002.04745" target="_blank" rel="external">https://arxiv.org/abs/2002.04745</a></p>
 
