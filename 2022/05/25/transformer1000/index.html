@@ -291,7 +291,7 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>$$\displaystyle\le\Vert \frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\Vert _2\cdot\Vert \frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T\Vert _2+\Vert \frac{\partial\mathrm{LN}(\mathbf z)}{\partial\mathbf z}\Vert _2\cdot\Vert \frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T\Vert _2$$</p>
 <p><br></p>
 <p>(1) 先看 $\displaystyle\Vert \frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T\Vert _2$ 这一项：</p>
-<p>$$\displaystyle(\frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T)_i=\sum_{j=1}^d\frac{\partial z_i}{\partial x_j}\Delta x_j^T=\alpha\Delta x_i^T+\sum_{j=1}^d\sum_{k=1}^m w_{jk}v_{ki}R_k\Delta x_j^T$$</p>
+<p>$$\displaystyle(\frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T)_i=\sum_{j=1}^d\frac{\partial z_i}{\partial x_j}\Delta x_j=\alpha\Delta x_i+\sum_{j=1}^d\sum_{k=1}^m w_{jk}v_{ki}R_k\Delta x_j$$</p>
 <p>$$\displaystyle E[(\frac{\partial \mathbf z}{\partial \mathbf x}\Delta\mathbf x^T)_i^2]=\alpha^2E[(\Delta x_i)^2]+\sum_{j=1}^d\sum_{k=1}^m\frac{1}{2}E[w_{jk}^2]E[v_{ki}^2]E[(\Delta x_j)^2]$$</p>
 <p>$$\displaystyle=\alpha^2E[(\Delta x_i)^2]+\sum_{j=1}^dE[(\Delta x_j)^2]\frac{1}{2}m\frac{v^2}{m}\frac{2w^2}{d}$$</p>
 <p>$$\displaystyle=\alpha^2E[(\Delta x_i)^2]+\frac{v^2w^2}{d}\sum_{j=1}^dE[(\Delta x_j)^2]$$</p>
