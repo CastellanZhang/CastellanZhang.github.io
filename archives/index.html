@@ -149,7 +149,9 @@ body{ -webkit-animation: bugfix infinite 1s; }
       <div class="entry">
         
           
-            <h1 id="Transformer_u505A_u7684_u5343_u5C42_u997C"><a href="#Transformer_u505A_u7684_u5343_u5C42_u997C" class="headerlink" title="Transformer做的千层饼"></a>Transformer做的千层饼</h1><h1 id="1-__u524D_u8A00"><a href="#1-__u524D_u8A00" class="headerlink" title="1. 前言"></a>1. 前言</h1><p>Transformer做的千层饼吃过没？</p>
+            <h1 id="Transformer_u505A_u7684_u5343_u5C42_u997C"><a href="#Transformer_u505A_u7684_u5343_u5C42_u997C" class="headerlink" title="Transformer做的千层饼"></a>Transformer做的千层饼</h1><p>本文同时发布在我的微信公众号“AI推公式”，和我的知乎专栏(知乎ID：CastellanZhang)，欢迎关注。</p>
+<p><img src="/img/transformer1000_qrcode.jpg" alt=""></p>
+<h1 id="1-__u524D_u8A00"><a href="#1-__u524D_u8A00" class="headerlink" title="1. 前言"></a>1. 前言</h1><p>Transformer做的千层饼吃过没？</p>
 <p>最近看到一篇微软出的paper[1]，把Transformer堆到了1000层，并在一些NLP任务上取得了很好的效果，叹为观止。不是靠暴力调参，而是有分析，有推导，理论结合实践，整个过程值得仔细学习。不过感觉其中的数学推导有些地方值得商榷，我会按照我的理解重新梳理和补充。paper中不仅分析了只有encoder的结构（比如BERT），还分析了包含decoder的结构，分析过程大同小异，因此为了省事，我在本文中只讨论纯encoder的结构。</p>
 <p><img src="/img/transformer1000_figure1.png" alt=""></p>
 <h1 id="2-__u5177_u4F53_u505A_u6CD5"><a href="#2-__u5177_u4F53_u505A_u6CD5" class="headerlink" title="2. 具体做法"></a>2. 具体做法</h1><p>现在的深度模型都在极度膨胀，变得一个比一个大，有的横向发展，有的纵向拉伸，比如很多人都在玩Transformer垒积木，越垒越高，但始终无法突破1000层。这一次微软的大神们终于冲破玄关，一举成功。</p>
@@ -314,12 +316,12 @@ body{ -webkit-animation: bugfix infinite 1s; }
 <p>$$\displaystyle(\frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T)_i=\sum_{k=1}^m\frac{\partial z_i}{\partial v_{ki}}\Delta v_{ki}+\sum_{j=1}^m\sum_{k=1}^d\frac{\partial z_i}{\partial w_{jk}}\Delta w_{jk}$$</p>
 <p>$$\displaystyle=\sum_{k=1}^m\sum_{j=1}^d x_jw_{jk}R_k\Delta v_{ki}+\sum_{j=1}^m\sum_{k=1}^dx_jv_{ki}R_k\Delta w_{jk}$$</p>
 <p>可算出：</p>
-<p>$$\displaystyle E[(\frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T)_i^2]=w^2\sum_{k=1}^mE[(\Delta v_{ki})^2]+\frac{1}{2m}v^2E[\Vert \Delta vec(W)\Vert ^2]$$</p>
+<p>$$\displaystyle E[(\frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T)_i^2]=w^2\sum_{k=1}^mE[(\Delta v_{ki})^2]+\frac{1}{2m}v^2E[\Vert \Delta vec(W)\Vert_2^2]$$</p>
 <p>因此有</p>
-<p>$$\displaystyle E[\Vert \frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T\Vert _2^2]=\sum_{i=1}^dw^2\sum_{k=1}^mE[(\Delta v_{ki})^2]+\sum_{i=1}^d\frac{1}{2m}v^2E[\Vert \Delta vec(W)\Vert ^2]$$</p>
-<p>$$\displaystyle=w^2E[\Vert \Delta vec(V)\Vert _2^2]+\frac{dv^2}{2m}E[\Vert \Delta vec(W)\Vert ^2]$$</p>
-<p>$$\displaystyle\le w^2E[\Vert \Delta vec(V)\Vert _2^2]+v^2E[\Vert \Delta vec(W)\Vert ^2]$$</p>
-<p>$$\lt (v^2+w^2)E[\Vert \Delta vec(V)\Vert _2^2+\Vert \Delta vec(W)\Vert ^2]$$</p>
+<p>$$\displaystyle E[\Vert \frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T\Vert _2^2]=\sum_{i=1}^dw^2\sum_{k=1}^mE[(\Delta v_{ki})^2]+\sum_{i=1}^d\frac{1}{2m}v^2E[\Vert \Delta vec(W)\Vert_2^2]$$</p>
+<p>$$\displaystyle=w^2E[\Vert \Delta vec(V)\Vert _2^2]+\frac{dv^2}{2m}E[\Vert \Delta vec(W)\Vert_2^2]$$</p>
+<p>$$\displaystyle\le w^2E[\Vert \Delta vec(V)\Vert _2^2]+v^2E[\Vert \Delta vec(W)\Vert_2^2]$$</p>
+<p>$$\lt (v^2+w^2)E[\Vert \Delta vec(V)\Vert _2^2+\Vert \Delta vec(W)\Vert_2^2]$$</p>
 <p>$$=(v^2+w^2)E[\Vert \Delta \theta\Vert _2^2]$$</p>
 <p>【注意这里是刻意凑出和论文一样的结果，其实如果事先设定 $v=w=\beta$，这里上界可以更小，为： $\beta ^2E[\Vert \Delta \theta\Vert _2^2]$ 】</p>
 <p>所以 $\displaystyle\Vert \frac{\partial \mathbf z}{\partial vec(V)}\Delta vec(V)^T+\frac{\partial \mathbf z}{\partial vec(W)}\Delta vec(W)^T\Vert _2\approx\sqrt{v^2+w^2}\Vert \Delta\theta\Vert _2$</p>
